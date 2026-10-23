@@ -1,0 +1,246 @@
+{
+	"gf": {
+		"image": "GF_assets", "dance": "leftright", "icon_frames": [16],
+		"finish_to": { "hairFall": "danceRight" },
+		"animations": [
+			["cheer", "GF Cheer", 0, 0],
+			["singLEFT", "GF left note", 0, -19],
+			["singRIGHT", "GF Right Note", 0, -20],
+			["singUP", "GF Up Note", 0, 4],
+			["singDOWN", "GF Down Note", 0, -20],
+			["sad", "gf sad", -2, -2, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], true],
+			["danceLeft", "GF Dancing Beat", 0, -9, [30, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]],
+			["danceRight", "GF Dancing Beat", 0, -9, [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]],
+			["hairBlow", "GF Dancing Beat Hair blowing", 45, -8, [0, 1, 2, 3], true],
+			["hairFall", "GF Dancing Beat Hair Landing", 0, -9, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]],
+			["scared", "GF FEAR", -2, -17, null, true]
+		]
+	},
+	"gf-christmas": {
+		"image": "christmas/gfChristmas", "dance": "leftright", "icon_frames": [16],
+		"animations": [
+			["cheer", "GF Cheer", 0, 0],
+			["singLEFT", "GF left note", 0, -19],
+			["singRIGHT", "GF Right Note", 0, -20],
+			["singUP", "GF Up Note", 0, 4],
+			["singDOWN", "GF Down Note", 0, -20],
+			["sad", "gf sad", -2, -2, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]],
+			["danceLeft", "GF Dancing Beat", 0, -9, [30, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]],
+			["danceRight", "GF Dancing Beat", 0, -9, [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]],
+			["hairBlow", "GF Dancing Beat Hair blowing", 45, -8, [0, 1, 2, 3], true],
+			["hairFall", "GF Dancing Beat Hair Landing", 0, -9, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]],
+			["scared", "GF FEAR", -2, -17, null, true]
+		]
+	},
+	"gf-car": {
+		"image": "gfCar", "dance": "leftright", "icon_frames": [16], "idle_loop": "idleHair",
+		"animations": [
+			["singUP", "GF Dancing Beat Hair blowing CAR", 0, 0, [0]],
+			["danceLeft", "GF Dancing Beat Hair blowing CAR", 0, 0, [30, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]],
+			["danceRight", "GF Dancing Beat Hair blowing CAR", 0, 0, [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]],
+			["idleHair", "GF Dancing Beat Hair blowing CAR", 0, 0, [10, 11, 12, 25, 26, 27], true]
+		]
+	},
+	"gf-pixel": {
+		"image": "weeb/gfPixel", "dance": "leftright", "icon_frames": [16], "scale": 6, "antialiasing": false,
+		"animations": [
+			["singUP", "GF IDLE", 0, 0, [2]],
+			["danceLeft", "GF IDLE", 0, 0, [30, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]],
+			["danceRight", "GF IDLE", 0, 0, [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]]
+		]
+	},
+	"dad": {
+		"image": "DADDY_DEAREST", "icon_frames": [12, 13], "sing_duration": 6.1,
+		"animations": [
+			["idle", "Dad idle dance", 0, 0],
+			["singUP", "Dad Sing Note UP", -6, 50],
+			["singRIGHT", "Dad Sing Note RIGHT", 0, 27],
+			["singDOWN", "Dad Sing Note DOWN", 0, -30],
+			["singLEFT", "Dad Sing Note LEFT", -10, 10]
+		]
+	},
+	"spooky": {
+		"image": "spooky_kids_assets", "dance": "leftright", "icon_frames": [2, 3],
+		"animations": [
+			["singUP", "spooky UP NOTE", -20, 26],
+			["singDOWN", "spooky DOWN note", -50, -130],
+			["singLEFT", "note sing left", 130, -10],
+			["singRIGHT", "spooky sing right", -130, -14],
+			["danceLeft", "spooky dance idle", 0, 0, [0, 2, 6], false, 12],
+			["danceRight", "spooky dance idle", 0, 0, [8, 10, 12, 14], false, 12]
+		]
+	},
+	"mom": {
+		"image": "Mom_Assets", "icon_frames": [6, 7],
+		"animations": [
+			["idle", "Mom Idle", 0, 0],
+			["singUP", "Mom Up Pose", 14, 71],
+			["singDOWN", "MOM DOWN POSE", 20, -160],
+			["singLEFT", "Mom Left Pose", 250, -23],
+			["singRIGHT", "Mom Pose Left", 10, -60]
+		]
+	},
+	"mom-car": {
+		"image": "momCar", "icon_frames": [6, 7], "idle_loop": "idleHair",
+		"animations": [
+			["idle", "Mom Idle", 0, 0],
+			["singUP", "Mom Up Pose", 14, 71],
+			["singDOWN", "MOM DOWN POSE", 20, -160],
+			["singLEFT", "Mom Left Pose", 250, -23],
+			["singRIGHT", "Mom Pose Left", 10, -60],
+			["idleHair", "Mom Idle", 0, 0, [10, 11, 12, 13], true]
+		]
+	},
+	"monster": {
+		"image": "Monster_Assets", "icon_frames": [19, 20],
+		"animations": [
+			["idle", "monster idle", 0, 0],
+			["singUP", "monster up note", -20, 50],
+			["singDOWN", "monster down", -30, -40],
+			["singLEFT", "Monster left note", -30, 0],
+			["singRIGHT", "Monster Right note", -51, 0]
+		]
+	},
+	"monster-christmas": {
+		"image": "christmas/monsterChristmas", "icon_frames": [19, 20],
+		"animations": [
+			["idle", "monster idle", 0, 0],
+			["singUP", "monster up note", -20, 50],
+			["singDOWN", "monster down", -40, -94],
+			["singLEFT", "Monster left note", -30, 0],
+			["singRIGHT", "Monster Right note", -51, 0]
+		]
+	},
+	"pico": {
+		"image": "Pico_FNF_assetss", "icon_frames": [4, 5], "flip_x": true, "player_swaps": false,
+		"animations": [
+			["idle", "Pico Idle Dance", 0, 0],
+			["singUP", "pico Up note0", -29, 27],
+			["singDOWN", "Pico Down Note0", 200, -70],
+			["singLEFT", "Pico Note Right0", 65, 9],
+			["singRIGHT", "Pico NOTE LEFT0", -68, -7],
+			["singRIGHTmiss", "Pico NOTE LEFT miss", -60, 41],
+			["singLEFTmiss", "Pico Note Right Miss", 62, 64],
+			["singUPmiss", "pico Up note miss", -19, 67],
+			["singDOWNmiss", "Pico Down Note MISS", 210, -28]
+		]
+	},
+	"bf": {
+		"image": "BOYFRIEND", "icon_frames": [0, 1], "flip_x": true, "player_swaps": false,
+		"animations": [
+			["idle", "BF idle dance", -5, 0],
+			["singUP", "BF NOTE UP0", -29, 27],
+			["singLEFT", "BF NOTE LEFT0", 12, -6],
+			["singRIGHT", "BF NOTE RIGHT0", -38, -7],
+			["singDOWN", "BF NOTE DOWN0", -10, -50],
+			["singUPmiss", "BF NOTE UP MISS", -29, 27],
+			["singLEFTmiss", "BF NOTE LEFT MISS", 12, 24],
+			["singRIGHTmiss", "BF NOTE RIGHT MISS", -30, 21],
+			["singDOWNmiss", "BF NOTE DOWN MISS", -11, -19],
+			["hey", "BF HEY", 7, 4],
+			["firstDeath", "BF dies", 37, 11],
+			["deathLoop", "BF Dead Loop", 37, 5, null, true],
+			["deathConfirm", "BF Dead confirm", 37, 69],
+			["scared", "BF idle shaking", -4, 0, null, true]
+		]
+	},
+	"bf-christmas": {
+		"image": "christmas/bfChristmas", "icon_frames": [0, 1], "flip_x": true, "player_swaps": false,
+		"animations": [
+			["idle", "BF idle dance", -5, 0],
+			["singUP", "BF NOTE UP0", -29, 27],
+			["singLEFT", "BF NOTE LEFT0", 12, -6],
+			["singRIGHT", "BF NOTE RIGHT0", -38, -7],
+			["singDOWN", "BF NOTE DOWN0", -10, -50],
+			["singUPmiss", "BF NOTE UP MISS", -29, 27],
+			["singLEFTmiss", "BF NOTE LEFT MISS", 12, 24],
+			["singRIGHTmiss", "BF NOTE RIGHT MISS", -30, 21],
+			["singDOWNmiss", "BF NOTE DOWN MISS", -11, -19],
+			["hey", "BF HEY", 7, 4]
+		]
+	},
+	"bf-car": {
+		"image": "bfCar", "icon_frames": [0, 1], "flip_x": true, "player_swaps": false, "idle_loop": "idleHair",
+		"animations": [
+			["idle", "BF idle dance", -5, 0],
+			["singUP", "BF NOTE UP0", -29, 27],
+			["singLEFT", "BF NOTE LEFT0", 12, -6],
+			["singRIGHT", "BF NOTE RIGHT0", -38, -7],
+			["singDOWN", "BF NOTE DOWN0", -10, -50],
+			["singUPmiss", "BF NOTE UP MISS", -29, 27],
+			["singLEFTmiss", "BF NOTE LEFT MISS", 12, 24],
+			["singRIGHTmiss", "BF NOTE RIGHT MISS", -30, 21],
+			["singDOWNmiss", "BF NOTE DOWN MISS", -11, -19],
+			["idleHair", "BF idle dance", -5, 0, [10, 11, 12, 13], true]
+		]
+	},
+	"bf-pixel": {
+		"image": "weeb/bfPixel", "icon_frames": [21, 21], "flip_x": true, "player_swaps": false, "scale": 6, "antialiasing": false,
+		"hitbox_shrink": [100, 100],
+		"animations": [
+			["idle", "BF IDLE", 0, 0],
+			["singUP", "BF UP NOTE", 0, 0],
+			["singLEFT", "BF LEFT NOTE", 0, 0],
+			["singRIGHT", "BF RIGHT NOTE", 0, 0],
+			["singDOWN", "BF DOWN NOTE", 0, 0],
+			["singUPmiss", "BF UP MISS", 0, 0],
+			["singLEFTmiss", "BF LEFT MISS", 0, 0],
+			["singRIGHTmiss", "BF RIGHT MISS", 0, 0],
+			["singDOWNmiss", "BF DOWN MISS", 0, 0]
+		]
+	},
+	"bf-pixel-dead": {
+		"image": "weeb/bfPixelsDEAD", "icon_frames": [21, 21], "flip_x": true, "player_swaps": false, "scale": 6, "antialiasing": false,
+		"dance": "none",
+		"animations": [
+			["firstDeath", "BF Dies pixel", 0, 0],
+			["singUP", "BF Dies pixel", 0, 0],
+			["deathLoop", "Retry Loop", -37, 0, null, true],
+			["deathConfirm", "RETRY CONFIRM", -37, 0]
+		]
+	},
+	"senpai": {
+		"image": "weeb/senpai", "icon_frames": [22, 22], "scale": 6, "antialiasing": false,
+		"animations": [
+			["idle", "Senpai Idle", 0, 0],
+			["singUP", "SENPAI UP NOTE", 5, 37],
+			["singLEFT", "SENPAI LEFT NOTE", 40, 0],
+			["singRIGHT", "SENPAI RIGHT NOTE", 0, 0],
+			["singDOWN", "SENPAI DOWN NOTE", 14, 0]
+		]
+	},
+	"senpai-angry": {
+		"image": "weeb/senpai", "icon_frames": [22, 22], "scale": 6, "antialiasing": false,
+		"animations": [
+			["idle", "Angry Senpai Idle", 0, 0],
+			["singUP", "Angry Senpai UP NOTE", 5, 37],
+			["singLEFT", "Angry Senpai LEFT NOTE", 40, 0],
+			["singRIGHT", "Angry Senpai RIGHT NOTE", 0, 0],
+			["singDOWN", "Angry Senpai DOWN NOTE", 14, 0]
+		]
+	},
+	"spirit": {
+		"image": "weeb/spirit", "icon_frames": [23, 23], "scale": 6, "antialiasing": false,
+		"animations": [
+			["idle", "idle spirit_", -220, -280],
+			["singUP", "up_", -220, -240],
+			["singRIGHT", "right_", -220, -280],
+			["singLEFT", "left_", -200, -280],
+			["singDOWN", "spirit down_", 170, 110]
+		]
+	},
+	"parents-christmas": {
+		"image": "christmas/mom_dad_christmas_assets", "icon_frames": [17],
+		"animations": [
+			["idle", "Parent Christmas Idle", 0, 0],
+			["singUP", "Parent Up Note Dad", -47, 24],
+			["singDOWN", "Parent Down Note Dad", -31, -29],
+			["singLEFT", "Parent Left Note Dad", -30, 16],
+			["singRIGHT", "Parent Right Note Dad", -1, -23],
+			["singUP-alt", "Parent Up Note Mom", -47, 24],
+			["singDOWN-alt", "Parent Down Note Mom", -30, -27],
+			["singLEFT-alt", "Parent Left Note Mom", -30, 15],
+			["singRIGHT-alt", "Parent Right Note Mom", -1, -24]
+		]
+	}
+}
