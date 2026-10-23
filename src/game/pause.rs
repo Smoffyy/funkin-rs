@@ -7,7 +7,7 @@ use crate::engine::sprite::Sprite;
 use crate::engine::text::Text;
 use crate::engine::tween::{Ease, Prop, Tween};
 
-use super::data::{Control, Input, DIFFICULTIES};
+use super::data::{Control, Input};
 use super::library;
 use super::song::Song;
 use super::alphabet::Alphabet;
@@ -19,7 +19,6 @@ pub enum PauseAction {
 }
 
 const MAIN: [&str; 5] = ["Resume", "Restart Song", "Change Difficulty", "Toggle Practice Mode", "Exit to menu"];
-const DIFFS: [&str; 4] = ["EASY", "NORMAL", "HARD", "BACK"];
 
 pub struct PauseMenu {
     song: Rc<Song>,
@@ -28,7 +27,8 @@ pub struct PauseMenu {
     infos: Vec<Text>,
     practice: Text,
     items: Vec<Alphabet>,
-    labels: Vec<&'static str>,
+    labels: Vec<String>,
+    choosing: bool,
     selected: usize,
     skip: bool,
 }
@@ -48,8 +48,7 @@ impl PauseMenu {
         bg.tween(Prop::Alpha, Tween::new(0.6, 0.4).ease(Ease::QuartInOut));
 
         let font = ctx.data.fonts.ui.clone();
-        let difficulty = DIFFICULTIES.get(ctx.data.session.story_difficulty).copied().unwrap_or("NORMAL");
-        let lines = [song.name.clone(), difficulty.to_string(), format!("Deaths: {}", ctx.data.session.death_counter)];
+        let lines = [song.name.clone(), song.difficulty.to_uppercase(), format!("Deaths: {}", ctx.data.session.death_counter)];
         let mut infos = Vec::new();
         for (i, line) in lines.iter().enumerate() {
             let mut t = Text::new(20.0, 15.0 + 32.0 * i as f64, 0.0, line, 32.0, font.clone());
@@ -68,8 +67,8 @@ impl PauseMenu {
         practice.sprite.x = GAME_WIDTH - (practice.width() + 20.0);
         practice.sprite.visible = ctx.data.session.practice_mode;
 
-        let mut menu = PauseMenu { song, music, bg, infos, practice, items: Vec::new(), labels: Vec::new(), selected: 0, skip: false };
-        menu.regen(ctx, &MAIN);
+        let mut menu = PauseMenu { song, music, bg, infos, practice, items: Vec::new(), labels: Vec::new(), choosing: false, selected: 0, skip: false };
+        menu.regen(ctx, MAIN.iter().map(|s| s.to_string()).collect());
         menu
     }
 
@@ -77,9 +76,9 @@ impl PauseMenu {
         self.skip = true;
     }
 
-    fn regen(&mut self, ctx: &mut Ctx, labels: &[&'static str]) {
+    fn regen(&mut self, ctx: &mut Ctx, labels: Vec<String>) {
         self.items.clear();
-        self.labels = labels.to_vec();
+        self.labels = labels.clone();
         for (i, label) in labels.iter().enumerate() {
             let mut item = Alphabet::new(ctx, 0.0, 70.0 * i as f64 + 30.0, label, true);
             item.is_menu_item = true;
@@ -126,28 +125,31 @@ impl PauseMenu {
         if !ctx.just_pressed(Control::Accept) {
             return None;
         }
-        let label = self.labels[self.selected];
-        let action = match label {
-            "Resume" => Some(PauseAction::Resume),
-            "EASY" | "NORMAL" | "HARD" => {
-                let diff = DIFFS.iter().position(|d| *d == label).unwrap_or(1);
-                if let Some(song) = library::chart(ctx, &self.song.id, diff) {
-                    ctx.data.session.song = Some(song);
-                    ctx.data.session.story_difficulty = diff;
-                }
-                Some(PauseAction::Restart)
+        let label = self.labels[self.selected].clone();
+        if self.choosing {
+            if label == "BACK" {
+                self.choosing = false;
+                self.regen(ctx, MAIN.iter().map(|s| s.to_string()).collect());
+                return None;
             }
+            if let Some(song) = library::chart(ctx, &self.song.id, &label.to_lowercase()) {
+                ctx.data.session.song = Some(song);
+            }
+            self.music.stop();
+            return Some(PauseAction::Restart);
+        }
+        let action = match label.as_str() {
+            "Resume" => Some(PauseAction::Resume),
             "Toggle Practice Mode" => {
                 ctx.data.session.practice_mode = !ctx.data.session.practice_mode;
                 self.practice.sprite.visible = ctx.data.session.practice_mode;
                 None
             }
             "Change Difficulty" => {
-                self.regen(ctx, &DIFFS);
-                None
-            }
-            "BACK" => {
-                self.regen(ctx, &MAIN);
+                let mut names: Vec<String> = library::chart_file(ctx, &self.song.id).map(|c| c.names()).unwrap_or_default().iter().map(|n| n.to_uppercase()).collect();
+                names.push("BACK".to_string());
+                self.choosing = true;
+                self.regen(ctx, names);
                 None
             }
             "Restart Song" => Some(PauseAction::Restart),

@@ -70,7 +70,9 @@ impl GameOver {
             ctx.data.session.death_counter = 0;
             ctx.data.session.seen_cutscene = false;
             ctx.audio.music.stop();
-            if ctx.data.session.is_story_mode {
+            if ctx.data.session.editor.is_some() {
+                ctx.switch_state(|ctx| Box::new(super::editor::Editor::resume(ctx)));
+            } else if ctx.data.session.is_story_mode {
                 ctx.switch_state(|ctx| Box::new(super::story::StoryMenu::new(ctx)));
             } else {
                 ctx.switch_state(|ctx| Box::new(super::freeplay::Freeplay::new(ctx)));

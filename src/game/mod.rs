@@ -3,6 +3,7 @@ pub mod character;
 pub mod conductor;
 pub mod data;
 pub mod dialogue;
+pub mod editor;
 pub mod freeplay;
 pub mod game_over;
 pub mod gitaroo;
@@ -29,9 +30,20 @@ use crate::engine::assets::Assets;
 use conductor::Conductor;
 use data::{Controls, Fonts, Highscore, Prefs, Session};
 
+fn exe_dir() -> Option<PathBuf> {
+    std::env::current_exe().ok().and_then(|exe| exe.parent().map(PathBuf::from))
+}
+
+fn charts_dir() -> PathBuf {
+    match exe_dir().filter(|dir| dir.join("assets").exists()) {
+        Some(dir) => dir.join("charts"),
+        None => PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("charts"),
+    }
+}
+
 fn content_roots() -> Vec<PathBuf> {
     let mut bases = vec![PathBuf::from(env!("CARGO_MANIFEST_DIR"))];
-    if let Some(dir) = std::env::current_exe().ok().and_then(|exe| exe.parent().map(PathBuf::from)) {
+    if let Some(dir) = exe_dir() {
         bases.push(dir);
     }
     let mut roots = Vec::new();
@@ -71,6 +83,7 @@ pub fn boot() -> App {
                 conductor: Conductor::default(),
                 title_initialized: false,
                 characters: None,
+                charts_dir: charts_dir(),
             }
         },
         Box::new(|ctx: &mut Ctx| {

@@ -9,6 +9,7 @@ use crate::engine::tween::{Prop, Tween};
 use super::data::{Control, Input};
 use super::library;
 use super::play::PlayState;
+use super::song::DIFFICULTY_IDS;
 use super::weeks::WEEKS;
 
 const WEEK_PREFIXES: [&str; 7] = ["tutorial selected", "WEEK1 select", "week2 select", "Week 3 press", "Week 4 press", "week 5", "Week 6"];
@@ -201,7 +202,7 @@ impl StoryMenu {
         self.tracklist.set_text(&text.to_uppercase());
         self.tracklist.sprite.screen_center(Axes::X);
         self.tracklist.sprite.x -= GAME_WIDTH * 0.35;
-        self.intended_score = ctx.data.scores.week_score(self.cur_week, self.cur_difficulty);
+        self.intended_score = ctx.data.scores.week_score(self.cur_week, DIFFICULTY_IDS[self.cur_difficulty]);
     }
 
     fn change_week(&mut self, ctx: &mut Ctx, change: i64) {
@@ -222,7 +223,7 @@ impl StoryMenu {
         self.difficulty.offset.x = offset;
         self.difficulty.set_alpha(0.0);
         self.difficulty.y = self.left_arrow.y - 15.0;
-        self.intended_score = ctx.data.scores.week_score(self.cur_week, self.cur_difficulty);
+        self.intended_score = ctx.data.scores.week_score(self.cur_week, DIFFICULTY_IDS[self.cur_difficulty]);
         self.difficulty.tween(Prop::Y, Tween::new(self.left_arrow.y + 15.0, 0.07));
         self.difficulty.tween(Prop::Alpha, Tween::new(1.0, 0.07));
     }
@@ -242,7 +243,7 @@ impl StoryMenu {
         session.story_week = self.cur_week;
         session.campaign_score = 0;
         self.selected_week = true;
-        ctx.data.session.song = library::chart(ctx, week.songs[0], self.cur_difficulty);
+        ctx.data.session.song = library::chart(ctx, week.songs[0], DIFFICULTY_IDS[self.cur_difficulty]);
         self.start_timer.start(1.0, 1);
     }
 }

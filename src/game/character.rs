@@ -261,3 +261,7 @@ pub fn icon_frames(ctx: &mut Ctx, name: &str) -> Vec<usize> {
         .map(|a| a.iter().filter_map(|n| n.as_u64()).map(|n| n as usize).collect())
         .unwrap_or_else(|| vec![10, 11])
 }
+
+pub fn character_names(ctx: &mut Ctx) -> Vec<String> {
+    table(ctx).as_object().map(|m| m.keys().cloned().collect()).unwrap_or_default()
+}

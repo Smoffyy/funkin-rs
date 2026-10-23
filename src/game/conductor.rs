@@ -2,7 +2,7 @@ use super::song::Song;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct BpmChange {
-    pub step_time: i64,
+    pub step_time: f64,
     pub song_time: f64,
 }
 
@@ -42,17 +42,10 @@ impl Conductor {
 
     pub fn map_bpm_changes(&mut self, song: &Song) {
         self.bpm_change_map.clear();
-        let mut cur_bpm = song.bpm;
-        let mut total_steps = 0i64;
-        let mut total_pos = 0.0;
-        for section in &song.notes {
-            if section.change_bpm && section.bpm != cur_bpm {
-                cur_bpm = section.bpm;
-                self.bpm_change_map.push(BpmChange { step_time: total_steps, song_time: total_pos });
-            }
-            let delta = section.length_in_steps;
-            total_steps += delta;
-            total_pos += ((60.0 / cur_bpm) * 1000.0 / 4.0) * delta as f64;
+        let mut steps = 0.0;
+        for pair in song.timing.windows(2) {
+            steps += (pair[1].time - pair[0].time) / ((60.0 / pair[0].bpm) * 1000.0 / 4.0);
+            self.bpm_change_map.push(BpmChange { step_time: steps.round(), song_time: pair[1].time });
         }
     }
 
@@ -64,7 +57,7 @@ impl Conductor {
                 last = *change;
             }
         }
-        last.step_time + ((self.song_position - last.song_time) / self.step_crochet).floor() as i64
+        last.step_time as i64 + ((self.song_position - last.song_time) / self.step_crochet).floor() as i64
     }
 }
 

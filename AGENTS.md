@@ -20,6 +20,7 @@ A Rust remake of Friday Night Funkin'. The goal is a 1:1 recreation of how the g
 - Keep the build free of warnings. Delete code that becomes unused instead of silencing it.
 - Keep credits intact. `NOTICE` lists the original creators and must stay accurate.
 - The frame rate is intentionally uncapped with vsync off. Do not add a frame limiter or an FPS setting.
+- Optional gameplay changes (Opponent Note Strums, Ghost Tapping) must stay off by default so the default experience matches 0.2.8.
 
 ## Layout
 
@@ -43,7 +44,7 @@ src/engine/        HaxeFlixel-style engine
 src/game/          The game
   mod.rs           Boot, asset roots, GameData
   data.rs          Prefs, controls, highscores, session state
-  play.rs          PlayState: chart loading, notes, input, scoring, camera, song events, cutscenes
+  play.rs          PlayState: notes, input, scoring, camera, chart events, song events, cutscenes, playtesting
   stage.rs         All 0.2.8 stages, background props and their beat logic, Thorns trail
   character.rs     Characters loaded from content/data/characters.json
   note.rs          Notes and strum arrows, including pixel variants
@@ -52,10 +53,19 @@ src/game/          The game
   title.rs, main_menu.rs, story.rs, freeplay.rs, options.rs, pause.rs,
   game_over.rs, gitaroo.rs   Menus and sub screens
   weeks.rs         Week list, freeplay colors and icons
-  song.rs, conductor.rs, library.rs, widgets.rs   Charts, timing, asset loading helpers, health bar and icons
+  song.rs          Chart model: the funkin-rs chart format, legacy 0.2.x import, timing helpers
+  library.rs       Chart and audio loading (charts folder first, then assets), saving, custom song list
+  editor/          Chart editor: mod.rs (state and editing), panels.rs (tabs), ui.rs (immediate mode UI),
+                   preview.rs (character previews), waveform.rs
+  conductor.rs, widgets.rs   Timing, health bar and icons
 assets/            Official 0.2.7.1 assets, do not modify
 content/           VT323 font and the character table
+charts/            Saved and custom charts, one folder per song (chart.json, Inst.ogg, Voices.ogg)
 ```
+
+## Charts
+
+The game plays from an internal `Song` built from a `ChartFile` (`song.rs`). Official 0.2.7.1 charts stay untouched in `assets/data` and are converted on load: per-section `mustHitSection` becomes `focus` events, `changeBPM` becomes timing points, and `altAnim` is baked into opponent notes. Saved charts use the readable `funkin-rs-chart` format documented in the README (version 2: `difficulties` is a named list, and each difficulty may override `audio`, `timing` and `events`; version 1 files with a difficulty object still load), and `charts/<id>/chart.json` overrides the official chart with the same id. New features should extend this format (new event names or optional fields) rather than add per-song hardcoding. Event handling lives in `PlayState::fire_event`, and the editor lists event types in `EVENT_KINDS`.
 
 ## Character data
 

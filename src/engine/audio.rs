@@ -53,6 +53,7 @@ pub struct Sound {
     playing: bool,
     completed: bool,
     fade: Option<Fade>,
+    rate: f64,
 }
 
 impl Default for Sound {
@@ -74,6 +75,7 @@ impl Sound {
             playing: false,
             completed: false,
             fade: None,
+            rate: 1.0,
         }
     }
 
@@ -132,7 +134,7 @@ impl Sound {
     fn start(&mut self, audio: &mut Audio, start_ms: f64) {
         self.stop();
         let Some(data) = self.data.clone() else { return };
-        let mut data = data.start_position((start_ms / 1000.0).max(0.0)).volume(decibels(self.volume));
+        let mut data = data.start_position((start_ms / 1000.0).max(0.0)).volume(decibels(self.volume)).playback_rate(self.rate);
         if self.looped {
             data = data.loop_region(..);
         }
@@ -140,6 +142,13 @@ impl Sound {
         self.applied_volume = self.volume;
         self.playing = self.handle.is_some();
         self.completed = false;
+    }
+
+    pub fn set_rate(&mut self, rate: f64) {
+        self.rate = rate;
+        if let Some(h) = self.handle.as_mut() {
+            h.set_playback_rate(rate, instant());
+        }
     }
 
     pub fn pause(&mut self) {
@@ -240,6 +249,10 @@ impl Audio {
         }
     }
 
+    pub fn forget(&mut self, path: &Path) {
+        self.cache.remove(&path.to_string_lossy().to_string());
+    }
+
     pub fn load(&mut self, path: &Path) -> Option<StaticSoundData> {
         let key = path.to_string_lossy().to_string();
         if let Some(cached) = self.cache.get(&key) {
@@ -279,6 +292,14 @@ impl Audio {
         music = Sound::new(data, volume, looped);
         music.play(self, true, 0.0);
         self.music = music;
+    }
+
+    pub fn seek_music(&mut self, ms: f64) {
+        if ms > 0.0 {
+            let mut music = std::mem::take(&mut self.music);
+            music.set_time(self, ms);
+            self.music = music;
+        }
     }
 
     pub fn fade_in_music(&mut self, duration: f64, from: f64, to: f64) {

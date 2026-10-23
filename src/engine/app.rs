@@ -1,13 +1,13 @@
 use std::rc::Rc;
 
-use miniquad::{window, EventHandler, KeyCode, KeyMods};
+use miniquad::{window, EventHandler, KeyCode, KeyMods, MouseButton};
 
 use super::assets::Assets;
 use super::atlas::Frames;
 use super::audio::Audio;
 use super::camera::Camera;
 use super::gfx::{Affine, DrawList, Gfx, View, GAME_HEIGHT, GAME_WIDTH};
-use super::input::Keys;
+use super::input::{Keys, Mouse};
 use super::math::Rng;
 use super::save::Save;
 use super::sprite::Sprite;
@@ -38,6 +38,7 @@ pub struct Ctx {
     pub assets: Assets,
     pub audio: Audio,
     pub keys: Keys,
+    pub mouse: Mouse,
     pub cameras: Vec<Camera>,
     pub rng: Rng,
     pub save: Save,
@@ -268,6 +269,7 @@ impl App {
             assets,
             audio,
             keys: Keys::default(),
+            mouse: Mouse::default(),
             cameras: vec![Camera::new()],
             rng: Rng::from_time(),
             save,
@@ -380,6 +382,8 @@ impl EventHandler for App {
         self.ctx.ticks += elapsed * 1000.0;
         self.fps.update(now * 1000.0);
         self.ctx.keys.update();
+        let (w, h) = window::screen_size();
+        self.ctx.mouse.update(&View::fit(w as f64, h as f64));
         if self.ctx.keys.just_pressed(KeyCode::F11) {
             self.fullscreen = !self.fullscreen;
             window::set_fullscreen(self.fullscreen);
@@ -450,9 +454,32 @@ impl EventHandler for App {
     }
 
     fn key_down_event(&mut self, keycode: KeyCode, _mods: KeyMods, repeat: bool) {
-        if !repeat {
+        if repeat {
+            self.ctx.keys.repeat_event(keycode);
+        } else {
             self.ctx.keys.key_event(keycode, true);
         }
+    }
+
+    fn char_event(&mut self, character: char, _mods: KeyMods, _repeat: bool) {
+        self.ctx.keys.char_event(character);
+    }
+
+    fn mouse_motion_event(&mut self, x: f32, y: f32) {
+        self.ctx.mouse.raw_x = x as f64;
+        self.ctx.mouse.raw_y = y as f64;
+    }
+
+    fn mouse_wheel_event(&mut self, _x: f32, y: f32) {
+        self.ctx.mouse.wheel_event(y as f64);
+    }
+
+    fn mouse_button_down_event(&mut self, button: MouseButton, _x: f32, _y: f32) {
+        self.ctx.mouse.button_event(button, true);
+    }
+
+    fn mouse_button_up_event(&mut self, button: MouseButton, _x: f32, _y: f32) {
+        self.ctx.mouse.button_event(button, false);
     }
 
     fn key_up_event(&mut self, keycode: KeyCode, _mods: KeyMods) {

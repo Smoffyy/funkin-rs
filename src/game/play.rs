@@ -20,7 +20,7 @@ use super::gitaroo::GitarooPause;
 use super::library;
 use super::note::{strum, Note, SWAG_WIDTH};
 use super::pause::{PauseAction, PauseMenu};
-use super::song::Song;
+use super::song::{ChartEvent, Side, Song};
 use super::stage::{Kind, Stage, PIXEL_ZOOM};
 use super::widgets::{HealthBar, HealthIcon};
 
@@ -93,6 +93,10 @@ pub struct PlayState {
     gf_speed: i64,
     default_cam_zoom: f64,
     start_timer: Timer,
+    start_time: f64,
+    playtesting: bool,
+    silent: bool,
+    event_index: usize,
     swag_counter: usize,
     clock: SongClock,
     cam_zoom_tween: Option<Tween>,
@@ -135,17 +139,21 @@ impl PlayState {
 
         let song = match ctx.data.session.song.clone() {
             Some(s) => s,
-            None => library::chart(ctx, "tutorial", 1).expect("tutorial chart missing"),
+            None => library::chart(ctx, "tutorial", "normal").expect("tutorial chart missing"),
         };
+        let playtesting = ctx.data.session.editor.is_some();
+        let start_time = if playtesting { ctx.data.session.playtest_start.max(0.0) } else { 0.0 };
         ctx.data.conductor.map_bpm_changes(&song);
-        ctx.data.conductor.change_bpm(song.bpm);
-        ctx.data.conductor.offset = ctx.data.prefs.offset;
+        ctx.data.conductor.change_bpm(song.bpm());
+        ctx.data.conductor.offset = ctx.data.prefs.offset - song.offset;
 
-        let stage = Stage::new(ctx, &song.id);
+        let kind = Kind::for_chart(song.stage.as_deref(), &song.id);
+        let stage = Stage::new(ctx, kind, &song.id);
         let pixel = stage.kind.is_pixel();
         let default_cam_zoom = stage.zoom;
 
-        let mut gf = Character::new(ctx, 400.0, 130.0, stage.kind.gf_version(), false);
+        let gf_name = song.girlfriend.clone().unwrap_or_else(|| kind.gf_version().to_string());
+        let mut gf = Character::new(ctx, 400.0, 130.0, &gf_name, false);
         gf.sprite.scroll.set(0.95, 0.95);
 
         let mut dad = Character::new(ctx, 100.0, 100.0, &song.player2, false);
@@ -266,6 +274,10 @@ impl PlayState {
             gf_speed: 1,
             default_cam_zoom,
             start_timer: Timer::new(),
+            start_time,
+            playtesting,
+            silent: false,
+            event_index: song.events.iter().position(|e| e.time >= start_time).unwrap_or(song.events.len()),
             swag_counter: 0,
             clock: SongClock { last_audio: f64::NAN, anchor: 0.0 },
             cam_zoom_tween: None,
@@ -450,44 +462,39 @@ impl PlayState {
 
     fn generate_song(&mut self, ctx: &mut Ctx) {
         let song = self.song.clone();
-        ctx.data.conductor.change_bpm(song.bpm);
+        ctx.data.conductor.change_bpm(song.bpm());
         if song.needs_voices {
-            let data = library::voices(ctx, &song.name);
+            let data = library::voices(ctx, &song.id, &song.name, song.voices.as_deref());
             self.vocals = Sound::new(data, 1.0, false);
         }
         let speed = song.speed;
         let pixel = self.pixel;
         let mut order: Vec<usize> = Vec::new();
-        for section in &song.notes {
-            for chart in &section.notes {
-                let data = (chart.data.rem_euclid(4)) as usize;
-                let mut gotta_hit = section.must_hit;
-                if chart.data > 3 {
-                    gotta_hit = !section.must_hit;
-                }
+        for chart in song.notes.iter().filter(|n| n.time >= self.start_time) {
+            let data = chart.lane;
+            let gotta_hit = chart.side == Side::Player;
+            let old = order.last().copied();
+            let index = Note::create(ctx, &mut self.notes, chart.time, data, old, false, speed, pixel);
+            self.notes[index].sustain_length = chart.length;
+            self.notes[index].alt = chart.alt;
+            self.notes[index].sprite.scroll.set(0.0, 0.0);
+            order.push(index);
+            let step = ctx.data.conductor.step_crochet;
+            let sus = (chart.length / step).floor() as i64;
+            for s in 0..sus.max(0) {
                 let old = order.last().copied();
-                let index = Note::create(ctx, &mut self.notes, chart.time, data, old, false, speed, pixel);
-                self.notes[index].sustain_length = chart.length;
-                self.notes[index].alt = chart.alt;
-                self.notes[index].sprite.scroll.set(0.0, 0.0);
-                order.push(index);
-                let step = ctx.data.conductor.step_crochet;
-                let sus = (chart.length / step).floor() as i64;
-                for s in 0..sus.max(0) {
-                    let old = order.last().copied();
-                    let time = chart.time + step * s as f64 + step;
-                    let i = Note::create(ctx, &mut self.notes, time, data, old, true, speed, pixel);
-                    self.notes[i].sprite.scroll.set(0.0, 0.0);
-                    self.notes[i].must_press = gotta_hit;
-                    if gotta_hit {
-                        self.notes[i].sprite.x += GAME_WIDTH / 2.0;
-                    }
-                    order.push(i);
-                }
-                self.notes[index].must_press = gotta_hit;
+                let time = chart.time + step * s as f64 + step;
+                let i = Note::create(ctx, &mut self.notes, time, data, old, true, speed, pixel);
+                self.notes[i].sprite.scroll.set(0.0, 0.0);
+                self.notes[i].must_press = gotta_hit;
                 if gotta_hit {
-                    self.notes[index].sprite.x += GAME_WIDTH / 2.0;
+                    self.notes[i].sprite.x += GAME_WIDTH / 2.0;
                 }
+                order.push(i);
+            }
+            self.notes[index].must_press = gotta_hit;
+            if gotta_hit {
+                self.notes[index].sprite.x += GAME_WIDTH / 2.0;
             }
         }
         let notes = &self.notes;
@@ -516,7 +523,7 @@ impl PlayState {
         self.generate_static_arrows(ctx, 0);
         self.generate_static_arrows(ctx, 1);
         self.started_countdown = true;
-        ctx.data.conductor.song_position = 0.0;
+        ctx.data.conductor.song_position = self.start_time;
         ctx.data.conductor.song_position -= ctx.data.conductor.crochet * 5.0;
         self.swag_counter = 0;
         self.start_timer.start(ctx.data.conductor.crochet / 1000.0, 4);
@@ -575,10 +582,12 @@ impl PlayState {
     fn start_song(&mut self, ctx: &mut Ctx) {
         self.starting_song = false;
         if !self.paused {
-            let data = library::inst(ctx, &self.song.name);
+            let data = library::inst(ctx, &self.song.id, &self.song.name, self.song.inst.as_deref());
+            self.silent = data.is_none();
             ctx.audio.play_music(data, 1.0, false);
+            ctx.audio.seek_music(self.start_time);
         }
-        self.vocals.play(&mut ctx.audio, false, 0.0);
+        self.vocals.play(&mut ctx.audio, false, self.start_time);
     }
 
     fn resync_vocals(&mut self, ctx: &mut Ctx) {
@@ -651,12 +660,6 @@ impl PlayState {
     fn beat_hit(&mut self, ctx: &mut Ctx, beat: i64) {
         if self.generated_music {
             self.sort_notes();
-        }
-        let section = (self.beat.cur_step as f64 / 16.0).floor() as usize;
-        if let Some(s) = self.song.notes.get(section) {
-            if s.change_bpm {
-                ctx.data.conductor.change_bpm(s.bpm);
-            }
         }
         if ctx.data.prefs.camera_zoom {
             if self.song.id == "milf" && (168..200).contains(&beat) && self.cam_zooming && ctx.cameras[CAM_GAME].zoom < 1.35 {
@@ -1085,14 +1088,7 @@ impl PlayState {
                 if self.song.id != "tutorial" {
                     self.cam_zooming = true;
                 }
-                let section = (self.beat.cur_step as f64 / 16.0).floor() as usize;
-                let mut alt = "";
-                if self.song.notes.get(section).map(|s| s.alt_anim).unwrap_or(false) {
-                    alt = "-alt";
-                }
-                if self.notes[i].alt {
-                    alt = "-alt";
-                }
+                let alt = if self.notes[i].alt { "-alt" } else { "" };
                 let name = format!("sing{}{}", COLORS[self.notes[i].data], alt);
                 let name = if self.dad.has_anim(&name) { name } else { format!("sing{}", COLORS[self.notes[i].data]) };
                 self.dad.play_anim(&name, true, false, 0);
@@ -1128,6 +1124,12 @@ impl PlayState {
             return;
         }
         self.ended = true;
+        if self.playtesting {
+            ctx.audio.music.stop();
+            self.vocals.stop();
+            ctx.switch_state(|ctx| Box::new(super::editor::Editor::resume(ctx)));
+            return;
+        }
         let session = &mut ctx.data.session;
         session.seen_cutscene = false;
         session.death_counter = 0;
@@ -1135,8 +1137,7 @@ impl PlayState {
         ctx.audio.music.set_volume(0.0);
         self.vocals.set_volume(0.0);
         if self.song.valid_score {
-            let diff = ctx.data.session.story_difficulty;
-            ctx.data.scores.save_score(&mut ctx.save, &self.song.name, self.song_score, diff);
+            ctx.data.scores.save_score(&mut ctx.save, &self.song.name, self.song_score, &self.song.difficulty);
         }
         if ctx.data.session.is_story_mode {
             ctx.data.session.campaign_score += self.song_score;
@@ -1149,9 +1150,8 @@ impl PlayState {
                 ctx.trans_out = ctx.default_trans_out;
                 let week = ctx.data.session.story_week;
                 if self.song.valid_score {
-                    let diff = ctx.data.session.story_difficulty;
                     let total = ctx.data.session.campaign_score;
-                    ctx.data.scores.save_week_score(&mut ctx.save, week, total, diff);
+                    ctx.data.scores.save_week_score(&mut ctx.save, week, total, &self.song.difficulty);
                 }
                 ctx.switch_state(|ctx| Box::new(super::story::StoryMenu::new(ctx)));
             } else {
@@ -1160,8 +1160,8 @@ impl PlayState {
                 ctx.audio.music.stop();
                 self.vocals.stop();
                 let next = ctx.data.session.story_playlist[0].clone();
-                let diff = ctx.data.session.story_difficulty;
-                ctx.data.session.song = library::chart(ctx, &next, diff);
+                let diff = self.song.difficulty.clone();
+                ctx.data.session.song = library::chart(ctx, &next, &diff);
                 if self.song.id == "eggnog" {
                     let zoom = ctx.cameras[CAM_GAME].zoom;
                     self.black = Some(cover(ctx, -GAME_WIDTH * zoom, -GAME_HEIGHT * zoom, GAME_WIDTH * 3.0, GAME_HEIGHT * 3.0, 0xFF000000));
@@ -1184,7 +1184,7 @@ impl PlayState {
         self.persistent_update = false;
         self.persistent_draw = true;
         self.paused = true;
-        if ctx.rng.bool(0.1) {
+        if !self.playtesting && ctx.rng.bool(0.1) {
             ctx.switch_state(|ctx| Box::new(GitarooPause::new(ctx)));
             return;
         }
@@ -1221,6 +1221,57 @@ impl PlayState {
         let pos = self.bf.sprite.screen_position(ctx.cameras[CAM_GAME].scroll_x, ctx.cameras[CAM_GAME].scroll_y);
         self.sub = Sub::GameOver(GameOver::new(ctx, pos.x, pos.y, self.pixel));
         self.sub_fresh = true;
+    }
+
+    fn focus_on_player(&self, time: f64) -> bool {
+        self.song
+            .events
+            .iter()
+            .filter(|e| e.name == "focus" && e.time <= time)
+            .last()
+            .map(|e| e.text("target") == Side::Player.name())
+            .unwrap_or(false)
+    }
+
+    fn character(&mut self, target: &str) -> &mut Character {
+        match target {
+            "player" | "bf" => &mut self.bf,
+            "girlfriend" | "gf" => &mut self.gf,
+            _ => &mut self.dad,
+        }
+    }
+
+    fn fire_event(&mut self, ctx: &mut Ctx, event: &ChartEvent) {
+        match event.name.as_str() {
+            "play_animation" => {
+                let animation = event.text("animation").to_string();
+                let character = self.character(event.text("target"));
+                if character.has_anim(&animation) {
+                    character.play_anim(&animation, true, false, 0);
+                    character.hold_timer = 0.0;
+                }
+            }
+            "camera_bump" => {
+                if ctx.data.prefs.camera_zoom {
+                    ctx.camera(CAM_GAME).zoom += event.number("game", 0.015);
+                    ctx.camera(CAM_HUD).zoom += event.number("hud", 0.03);
+                }
+            }
+            "camera_zoom" => self.default_cam_zoom = event.number("zoom", self.default_cam_zoom),
+            "gf_speed" => self.gf_speed = (event.number("speed", 1.0) as i64).max(1),
+            _ => {}
+        }
+    }
+
+    fn update_events(&mut self, ctx: &mut Ctx) {
+        let song = self.song.clone();
+        while let Some(event) = song.events.get(self.event_index) {
+            if event.time > ctx.data.conductor.song_position {
+                break;
+            }
+            self.event_index += 1;
+            self.fire_event(ctx, event);
+        }
     }
 
     fn update_song_events(&mut self) {
@@ -1262,20 +1313,33 @@ impl PlayState {
         if self.starting_song {
             if self.started_countdown {
                 ctx.data.conductor.song_position += ctx.elapsed * 1000.0;
-                if ctx.data.conductor.song_position >= 0.0 {
+                if ctx.data.conductor.song_position >= self.start_time {
                     self.start_song(ctx);
                 }
+            }
+        } else if self.silent {
+            if !self.paused {
+                ctx.data.conductor.song_position += ctx.elapsed * 1000.0;
+            }
+            let last = self.song.notes.iter().map(|n| n.time + n.length).fold(0.0, f64::max);
+            if ctx.data.conductor.song_position > last + 2000.0 {
+                self.end_song(ctx);
             }
         } else {
             let pos = self.song_position(ctx);
             ctx.data.conductor.song_position = pos;
         }
-        if !self.starting_song && ctx.audio.music.take_completed() {
+        if !self.starting_song && !self.silent && ctx.audio.music.take_completed() {
             self.end_song(ctx);
         }
         if self.vocals.take_completed() {
             self.vocals_finished = true;
         }
+        let bpm = self.song.bpm_at(ctx.data.conductor.song_position);
+        if bpm != ctx.data.conductor.bpm {
+            ctx.data.conductor.change_bpm(bpm);
+        }
+        self.update_events(ctx);
         if let Some(event) = self.beat.update(&ctx.data.conductor, true) {
             self.step_hit(ctx);
             if let Some(beat) = event.beat {
@@ -1287,6 +1351,14 @@ impl PlayState {
 
         if ctx.just_pressed(Control::Pause) && self.started_countdown && self.can_pause {
             self.open_pause(ctx);
+            return;
+        }
+        if ctx.keys.just_pressed(miniquad::KeyCode::Key7) && !self.playtesting && !ctx.is_exiting() {
+            ctx.audio.music.stop();
+            self.vocals.stop();
+            let id = self.song.id.clone();
+            let difficulty = self.song.difficulty.clone();
+            ctx.switch_state(move |ctx| Box::new(super::editor::Editor::open(ctx, &id, &difficulty)));
             return;
         }
         if ctx.keys.just_pressed(miniquad::KeyCode::Key9) {
@@ -1310,12 +1382,9 @@ impl PlayState {
         self.icon_p2.set_losing(percent > 80.0);
 
         if self.generated_music {
-            let section = (self.beat.cur_step as f64 / 16.0) as i64;
-            if section >= 0 {
-                if let Some(s) = self.song.notes.get(section as usize) {
-                    self.camera_right_side = s.must_hit;
-                    self.camera_movement(ctx);
-                }
+            if self.beat.cur_step >= 0 {
+                self.camera_right_side = self.focus_on_player(ctx.data.conductor.song_position);
+                self.camera_movement(ctx);
             }
         }
         if self.cam_zooming {
@@ -1389,7 +1458,9 @@ impl State for PlayState {
                     Some(PauseAction::Exit) => {
                         ctx.data.session.seen_cutscene = false;
                         ctx.data.session.death_counter = 0;
-                        if ctx.data.session.is_story_mode {
+                        if self.playtesting {
+                            ctx.switch_state(|ctx| Box::new(super::editor::Editor::resume(ctx)));
+                        } else if ctx.data.session.is_story_mode {
                             ctx.switch_state(|ctx| Box::new(super::story::StoryMenu::new(ctx)));
                         } else {
                             ctx.switch_state(|ctx| Box::new(super::freeplay::Freeplay::new(ctx)));

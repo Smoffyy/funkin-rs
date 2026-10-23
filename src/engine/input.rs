@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use miniquad::KeyCode;
+use miniquad::{KeyCode, MouseButton};
+
+use super::gfx::View;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum State {
@@ -29,6 +31,10 @@ pub struct Keys {
     pending: Vec<(KeyCode, bool)>,
     pub any_just_pressed: bool,
     first_just_released: Option<KeyCode>,
+    pub typed: Vec<char>,
+    repeated: Vec<KeyCode>,
+    pending_typed: Vec<char>,
+    pending_repeat: Vec<KeyCode>,
 }
 
 impl Keys {
@@ -36,7 +42,31 @@ impl Keys {
         self.pending.push((key, down));
     }
 
+    pub fn repeat_event(&mut self, key: KeyCode) {
+        self.pending_repeat.push(key);
+    }
+
+    pub fn char_event(&mut self, ch: char) {
+        if !ch.is_control() {
+            self.pending_typed.push(ch);
+        }
+    }
+
+    pub fn just_pressed_or_repeated(&self, key: KeyCode) -> bool {
+        self.just_pressed(key) || self.repeated.contains(&key)
+    }
+
+    pub fn ctrl(&self) -> bool {
+        self.pressed(KeyCode::LeftControl) || self.pressed(KeyCode::RightControl)
+    }
+
+    pub fn shift(&self) -> bool {
+        self.pressed(KeyCode::LeftShift) || self.pressed(KeyCode::RightShift)
+    }
+
     pub fn update(&mut self) {
+        self.typed = std::mem::take(&mut self.pending_typed);
+        self.repeated = std::mem::take(&mut self.pending_repeat);
         for input in self.inputs.values_mut() {
             if input.release_queued {
                 input.release_queued = false;
@@ -203,4 +233,65 @@ pub fn key_name(key: KeyCode) -> &'static str {
 
 pub fn key_from_name(name: &str) -> Option<KeyCode> {
     KEY_NAMES.iter().find(|(_, n)| *n == name).map(|(k, _)| *k)
+}
+
+#[derive(Default)]
+pub struct Mouse {
+    pub x: f64,
+    pub y: f64,
+    pub raw_x: f64,
+    pub raw_y: f64,
+    pub wheel: f64,
+    pending_wheel: f64,
+    down: [bool; 3],
+    last: [bool; 3],
+    pending: Vec<(usize, bool)>,
+}
+
+impl Mouse {
+    pub fn button_event(&mut self, button: MouseButton, down: bool) {
+        let index = match button {
+            MouseButton::Left => 0,
+            MouseButton::Right => 1,
+            MouseButton::Middle => 2,
+            _ => return,
+        };
+        self.pending.push((index, down));
+    }
+
+    pub fn wheel_event(&mut self, amount: f64) {
+        self.pending_wheel += amount;
+    }
+
+    pub fn update(&mut self, view: &View) {
+        self.last = self.down;
+        let mut pressed_now = [false; 3];
+        let mut requeue = Vec::new();
+        for (index, down) in std::mem::take(&mut self.pending) {
+            if down {
+                self.down[index] = true;
+                pressed_now[index] = true;
+            } else if pressed_now[index] {
+                requeue.push((index, false));
+            } else {
+                self.down[index] = false;
+            }
+        }
+        self.pending = requeue;
+        self.wheel = std::mem::take(&mut self.pending_wheel);
+        self.x = (self.raw_x - view.offset_x) / view.scale;
+        self.y = (self.raw_y - view.offset_y) / view.scale;
+    }
+
+    pub fn pressed(&self, button: usize) -> bool {
+        self.down[button]
+    }
+
+    pub fn just_pressed(&self, button: usize) -> bool {
+        self.down[button] && !self.last[button]
+    }
+
+    pub fn just_released(&self, button: usize) -> bool {
+        !self.down[button] && self.last[button]
+    }
 }

@@ -179,6 +179,18 @@ impl DrawList {
         layer.quads.push(quad);
     }
 
+    pub fn fill(&mut self, slot: usize, texture: TextureId, rect: [f64; 4], color: [f32; 4]) {
+        let Some(layer) = self.layer(slot) else { return };
+        let transform = layer.transform;
+        let [x, y, w, h] = rect;
+        let corner = |cx: f64, cy: f64, u: f32, v: f32| {
+            let (wx, wy) = transform.apply(cx, cy);
+            Vertex { pos: [wx as f32, wy as f32], uv: [u, v], mul: color, add: [0.0; 4] }
+        };
+        let vertices = [corner(x, y, 0.0, 0.0), corner(x + w, y, 1.0, 0.0), corner(x, y + h, 0.0, 1.0), corner(x + w, y + h, 1.0, 1.0)];
+        self.quad(slot, Quad { texture, linear: false, effect: Effect::None, vertices });
+    }
+
     pub fn overlay(&mut self, slot: usize, color: [f32; 4]) {
         if let Some(index) = self.slots.get(slot).copied().flatten() {
             self.layers[index].overlays.push(color);

@@ -24,6 +24,29 @@ pub enum Kind {
 }
 
 impl Kind {
+    pub const ALL: [Kind; 8] = [Kind::Stage, Kind::Spooky, Kind::Philly, Kind::Limo, Kind::Mall, Kind::MallEvil, Kind::School, Kind::SchoolEvil];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Kind::Stage => "stage",
+            Kind::Spooky => "spooky",
+            Kind::Philly => "philly",
+            Kind::Limo => "limo",
+            Kind::Mall => "mall",
+            Kind::MallEvil => "mallEvil",
+            Kind::School => "school",
+            Kind::SchoolEvil => "schoolEvil",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Kind> {
+        Kind::ALL.into_iter().find(|k| k.name().eq_ignore_ascii_case(name))
+    }
+
+    pub fn for_chart(stage: Option<&str>, song: &str) -> Kind {
+        stage.and_then(Kind::from_name).unwrap_or_else(|| Kind::for_song(song))
+    }
+
     pub fn for_song(song: &str) -> Kind {
         match song.to_lowercase().as_str() {
             "spookeez" | "monster" | "south" => Kind::Spooky,
@@ -199,8 +222,7 @@ fn dancer(ctx: &mut Ctx, x: f64, y: f64, key: &str, prefix: &str) -> Sprite {
 }
 
 impl Stage {
-    pub fn new(ctx: &mut Ctx, song: &str) -> Stage {
-        let kind = Kind::for_song(song);
+    pub fn new(ctx: &mut Ctx, kind: Kind, song: &str) -> Stage {
         let mut stage = Stage {
             kind,
             zoom: 1.05,

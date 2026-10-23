@@ -98,7 +98,7 @@ impl Options {
         bg.scroll.set(0.0, 0.0);
 
         let mut option_items = Vec::new();
-        for (i, label) in ["PREFERENCES", "CONTROLS", "EXIT"].iter().enumerate() {
+        for (i, label) in ["PREFERENCES", "CONTROLS", "CHART EDITOR", "EXIT"].iter().enumerate() {
             let mut t = Alphabet::atlas(ctx, 0.0, 100.0 + i as f64 * 100.0, label, Font::Bold);
             t.screen_center_x();
             t.scroll.set(0.0, 0.0);
@@ -251,6 +251,10 @@ impl Options {
             Page::Options => match index {
                 0 => self.set_page(ctx, Page::Preferences),
                 1 => self.set_page(ctx, Page::Controls),
+                2 => {
+                    self.enabled = false;
+                    ctx.switch_state(|ctx| Box::new(super::editor::Editor::blank(ctx)));
+                }
                 _ => {
                     self.enabled = false;
                     ctx.switch_state(|ctx| Box::new(super::main_menu::MainMenu::new(ctx)));

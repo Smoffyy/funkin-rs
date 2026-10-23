@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use fontdue::Font;
@@ -196,12 +197,8 @@ impl Highscore {
         Highscore { scores }
     }
 
-    pub fn format_song(song: &str, diff: usize) -> String {
-        match diff {
-            0 => format!("{song}-easy"),
-            2 => format!("{song}-hard"),
-            _ => song.to_string(),
-        }
+    pub fn format_song(song: &str, diff: &str) -> String {
+        if diff.is_empty() || diff == "normal" { song.to_string() } else { format!("{song}-{diff}") }
     }
 
     fn set(&mut self, save: &mut Save, key: String, score: i64) {
@@ -211,25 +208,25 @@ impl Highscore {
         save.flush();
     }
 
-    pub fn save_score(&mut self, save: &mut Save, song: &str, score: i64, diff: usize) {
+    pub fn save_score(&mut self, save: &mut Save, song: &str, score: i64, diff: &str) {
         let key = Self::format_song(&song.to_lowercase(), diff);
         if self.scores.get(&key).map(|s| *s < score).unwrap_or(true) {
             self.set(save, key, score);
         }
     }
 
-    pub fn save_week_score(&mut self, save: &mut Save, week: usize, score: i64, diff: usize) {
+    pub fn save_week_score(&mut self, save: &mut Save, week: usize, score: i64, diff: &str) {
         let key = Self::format_song(&format!("week{week}"), diff);
         if self.scores.get(&key).map(|s| *s < score).unwrap_or(true) {
             self.set(save, key, score);
         }
     }
 
-    pub fn score(&self, song: &str, diff: usize) -> i64 {
+    pub fn score(&self, song: &str, diff: &str) -> i64 {
         self.scores.get(&Self::format_song(&song.to_lowercase(), diff)).copied().unwrap_or(0)
     }
 
-    pub fn week_score(&self, week: usize, diff: usize) -> i64 {
+    pub fn week_score(&self, week: usize, diff: &str) -> i64 {
         self.scores.get(&Self::format_song(&format!("week{week}"), diff)).copied().unwrap_or(0)
     }
 }
@@ -246,6 +243,8 @@ pub struct Session {
     pub seen_cutscene: bool,
     pub campaign_score: i64,
     pub prev_cam_follow: Option<Point>,
+    pub editor: Option<Box<super::editor::EditorSession>>,
+    pub playtest_start: f64,
 }
 
 pub struct GameData {
@@ -257,9 +256,9 @@ pub struct GameData {
     pub conductor: Conductor,
     pub title_initialized: bool,
     pub characters: Option<Rc<Value>>,
+    pub charts_dir: PathBuf,
 }
 
-pub const DIFFICULTIES: [&str; 3] = ["EASY", "NORMAL", "HARD"];
 
 pub trait Input {
     fn pressed(&self, control: Control) -> bool;

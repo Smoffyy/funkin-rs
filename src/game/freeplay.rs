@@ -4,17 +4,20 @@ use crate::engine::math::{frame_lerp, haxe_round, interpolate_color, lerp};
 use crate::engine::sprite::Sprite;
 use crate::engine::text::{Align, Text};
 
-use super::data::{Control, Input, DIFFICULTIES};
+use super::data::{Control, Input};
 use super::library;
 use super::play::PlayState;
 use super::alphabet::Alphabet;
+use super::song::song_id;
 use super::weeks::{FREEPLAY_COLORS, WEEKS};
 use super::widgets::HealthIcon;
 
 struct Entry {
+    id: String,
     name: String,
     week: usize,
     icon: String,
+    difficulties: Vec<(String, Option<String>)>,
 }
 
 pub struct Freeplay {
@@ -26,7 +29,8 @@ pub struct Freeplay {
     score_bg: Sprite,
     diff_text: Text,
     selected: usize,
-    difficulty: usize,
+    difficulty: String,
+    preview: Option<(String, Option<String>)>,
     lerp_score: f64,
     intended_score: i64,
 }
@@ -37,14 +41,25 @@ impl Freeplay {
         let listed = ctx.assets.read_text("data/freeplaySonglist.txt").unwrap_or_default();
         for name in listed.lines().map(str::trim).filter(|l| !l.is_empty()) {
             if !WEEKS[1..].iter().any(|w| w.songs.iter().any(|s| s.eq_ignore_ascii_case(name))) {
-                songs.push(Entry { name: name.to_string(), week: 1, icon: "gf".to_string() });
+                songs.push(Entry { id: song_id(name), name: name.to_string(), week: 1, icon: "gf".to_string(), difficulties: Vec::new() });
             }
         }
         for (w, week) in WEEKS.iter().enumerate().skip(1) {
             for (i, song) in week.songs.iter().enumerate() {
-                songs.push(Entry { name: song.to_string(), week: w, icon: week.icon(i).to_string() });
+                songs.push(Entry { id: song_id(song), name: song.to_string(), week: w, icon: week.icon(i).to_string(), difficulties: Vec::new() });
             }
         }
+        for chart in library::custom_songs(ctx) {
+            if !songs.iter().any(|s| s.id == chart.id) {
+                songs.push(Entry { id: chart.id, name: chart.name, week: 0, icon: chart.opponent, difficulties: Vec::new() });
+            }
+        }
+        for entry in songs.iter_mut() {
+            if let Some(chart) = library::chart_file(ctx, &entry.id) {
+                entry.difficulties = chart.difficulties.iter().map(|d| (d.name.clone(), d.inst.clone())).collect();
+            }
+        }
+        songs.retain(|s| !s.difficulties.is_empty());
         if !ctx.audio.music.playing() {
             library::play_music(ctx, "freakyMenu", 1.0, true);
         }
@@ -72,32 +87,40 @@ impl Freeplay {
             score_bg,
             diff_text,
             selected: 0,
-            difficulty: 1,
+            difficulty: "normal".to_string(),
+            preview: None,
             lerp_score: 0.0,
             intended_score: 0,
         };
         if !f.songs.is_empty() {
             f.change_selection(ctx, 0);
-            f.change_diff(ctx, 0);
         }
         f
     }
 
     fn change_diff(&mut self, ctx: &mut Ctx, change: i64) {
-        self.difficulty = ((self.difficulty as i64 + change).rem_euclid(3)) as usize;
-        self.intended_score = ctx.data.scores.score(&self.songs[self.selected].name, self.difficulty);
-        ctx.data.session.story_difficulty = self.difficulty;
-        self.diff_text.set_text(&format!("< {} >", DIFFICULTIES[self.difficulty]));
+        let entry = &self.songs[self.selected];
+        let names: Vec<&str> = entry.difficulties.iter().map(|(n, _)| n.as_str()).collect();
+        let current = names.iter().position(|n| *n == self.difficulty).or_else(|| names.iter().position(|n| *n == "normal")).unwrap_or(0) as i64;
+        let next = (current + change).rem_euclid(names.len() as i64) as usize;
+        self.difficulty = names[next].to_string();
+        let inst = entry.difficulties[next].1.clone();
+        let (id, name) = (entry.id.clone(), entry.name.clone());
+        self.intended_score = ctx.data.scores.score(&name, &self.difficulty);
+        self.diff_text.set_text(&format!("< {} >", self.difficulty.to_uppercase()));
         self.position_highscore();
+        let wanted = (id.clone(), inst.clone());
+        if self.preview.as_ref() != Some(&wanted) {
+            let data = library::inst(ctx, &id, &name, inst.as_deref());
+            ctx.audio.play_music(data, 0.0, true);
+            self.preview = Some(wanted);
+        }
     }
 
     fn change_selection(&mut self, ctx: &mut Ctx, change: i64) {
         library::play_sound(ctx, "scrollMenu", 0.4);
         let len = self.songs.len() as i64;
         self.selected = ((self.selected as i64 + change).rem_euclid(len)) as usize;
-        self.intended_score = ctx.data.scores.score(&self.songs[self.selected].name, self.difficulty);
-        let data = library::inst(ctx, &self.songs[self.selected].name);
-        ctx.audio.play_music(data, 0.0, true);
         for icon in self.icons.iter_mut() {
             icon.sprite.set_alpha(0.6);
         }
@@ -106,6 +129,7 @@ impl Freeplay {
             item.target_y = i as f64 - self.selected as f64;
             item.set_alpha(if item.target_y == 0.0 { 1.0 } else { 0.6 });
         }
+        self.change_diff(ctx, 0);
     }
 
     fn position_highscore(&mut self) {
@@ -159,12 +183,17 @@ impl State for Freeplay {
             library::play_sound(ctx, "cancelMenu", 1.0);
             ctx.switch_state(|ctx| Box::new(super::main_menu::MainMenu::new(ctx)));
         }
+        if ctx.keys.just_pressed(miniquad::KeyCode::Key7) && !ctx.is_exiting() {
+            let id = self.songs[self.selected].id.clone();
+            let difficulty = self.difficulty.clone();
+            ctx.switch_state(move |ctx| Box::new(super::editor::Editor::open(ctx, &id, &difficulty)));
+        }
         if ctx.just_pressed(Control::Accept) && !ctx.is_exiting() {
-            let name = self.songs[self.selected].name.clone();
-            if let Some(song) = library::chart(ctx, &name, self.difficulty) {
+            let id = self.songs[self.selected].id.clone();
+            let difficulty = self.difficulty.clone();
+            if let Some(song) = library::chart(ctx, &id, &difficulty) {
                 ctx.data.session.song = Some(song);
                 ctx.data.session.is_story_mode = false;
-                ctx.data.session.story_difficulty = self.difficulty;
                 ctx.data.session.story_week = self.songs[self.selected].week;
                 ctx.switch_state(|ctx| Box::new(PlayState::new(ctx)));
             }
