@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::engine::app::Ctx;
-use crate::engine::atlas::Frames;
+use crate::engine::atlas::{Frame, Frames};
 use crate::engine::math::round_decimal;
 use crate::engine::sprite::Sprite;
 
@@ -24,6 +24,33 @@ pub struct Note {
     pub alt: bool,
     pub sustain_length: f64,
     pub is_sustain: bool,
+    pub shift: f64,
+    pub head: usize,
+}
+
+fn trimmed_body(frame: &Frame) -> Frame {
+    let mut out = frame.clone();
+    let row = frame.height.min(frame.source_height).max(0.0);
+    let dv = if row > 0.0 { (frame.uv[3] - frame.uv[1]) / row } else { 0.0 };
+    out.uv[1] = frame.uv[1] + dv;
+    out.uv[3] = frame.uv[3] - dv;
+    out.height = frame.height - 2.0;
+    out.source_height = frame.source_height - 2.0;
+    out.offset_y = frame.offset_y + 1.0;
+    out
+}
+
+fn body_frames(ctx: &mut Ctx) -> Rc<Frames> {
+    if let Some(frames) = ctx.assets.registered("NOTE_assets_body") {
+        return frames;
+    }
+    let base = ctx.atlas("NOTE_assets");
+    let frames: Vec<Frame> = base
+        .frames
+        .iter()
+        .map(|f| if f.name.contains("hold piece") { trimmed_body(f) } else { f.clone() })
+        .collect();
+    ctx.assets.register("NOTE_assets_body", Frames { texture: base.texture, frames })
 }
 
 fn add_note_anims(sprite: &mut Sprite, frames: &Rc<Frames>) {
@@ -57,6 +84,16 @@ fn add_pixel_anims(sprite: &mut Sprite, sustain: bool) {
 impl Note {
     pub fn create(ctx: &mut Ctx, notes: &mut Vec<Note>, strum_time: f64, data: usize, prev: Option<usize>, sustain: bool, speed: f64, pixel: bool) -> usize {
         let index = notes.len();
+        let head = match prev {
+            Some(p) if sustain => {
+                if notes[p].is_sustain {
+                    notes[p].head
+                } else {
+                    p
+                }
+            }
+            _ => index,
+        };
         let mut sprite = if pixel {
             let frames = if sustain { ctx.grid("weeb/pixelUI/arrowEnds", 7, 6) } else { ctx.grid("weeb/pixelUI/arrows-pixels", 17, 17) };
             let mut s = Sprite::with_frames(0.0, 0.0, frames);
@@ -66,7 +103,7 @@ impl Note {
             s.update_hitbox();
             s
         } else {
-            let frames = ctx.atlas("NOTE_assets");
+            let frames = if sustain { body_frames(ctx) } else { ctx.atlas("NOTE_assets") };
             let mut s = Sprite::with_frames(0.0, 0.0, frames.clone());
             add_note_anims(&mut s, &frames);
             let w = s.width;
@@ -92,6 +129,8 @@ impl Note {
             alt: false,
             sustain_length: 0.0,
             is_sustain: sustain,
+            shift: 0.0,
+            head,
         };
         if sustain && prev.is_some() {
             note.sprite.set_alpha(0.6);
@@ -106,6 +145,7 @@ impl Note {
                 note.sprite.x += 30.0;
             }
             let p = prev.unwrap();
+            note.shift = if notes[p].is_sustain { notes[p].shift } else { notes[p].sprite.height / 2.0 };
             if notes[p].is_sustain {
                 let span = strum_time - notes[p].strum_time;
                 let pn = &mut notes[p];

@@ -27,9 +27,6 @@ pub struct TransData {
 pub trait State {
     fn update(&mut self, ctx: &mut Ctx);
     fn draw(&mut self, ctx: &mut Ctx, dl: &mut DrawList);
-    fn persistent_update(&self) -> bool {
-        false
-    }
     fn trans_in_done(&mut self, _ctx: &mut Ctx) {}
 }
 
@@ -245,12 +242,64 @@ impl FpsCounter {
     }
 }
 
+#[cfg(windows)]
+fn screen_size() -> Option<(f32, f32)> {
+    unsafe extern "system" {
+        fn GetSystemMetrics(index: i32) -> i32;
+    }
+    let (w, h) = unsafe { (GetSystemMetrics(0), GetSystemMetrics(1)) };
+    Some((w as f32, h as f32))
+}
+
+#[cfg(not(windows))]
+fn screen_size() -> Option<(f32, f32)> {
+    None
+}
+
+fn center_window() {
+    let Some((sw, sh)) = screen_size() else { return };
+    let (w, h) = window::screen_size();
+    window::set_window_position(((sw - w) / 2.0).max(0.0) as u32, ((sh - h) / 2.0).max(0.0) as u32);
+}
+
+#[cfg(windows)]
+fn dark_title_bar(title: &str) {
+    use std::ffi::c_void;
+
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn FindWindowW(class: *const u16, name: *const u16) -> *mut c_void;
+    }
+
+    #[link(name = "dwmapi")]
+    unsafe extern "system" {
+        fn DwmSetWindowAttribute(hwnd: *mut c_void, attribute: u32, value: *const c_void, size: u32) -> i32;
+    }
+
+    let name: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
+    let dark: u32 = 1;
+    let caption: u32 = 0x00241A18;
+    unsafe {
+        let hwnd = FindWindowW(std::ptr::null(), name.as_ptr());
+        if !hwnd.is_null() {
+            for attribute in [19, 20] {
+                DwmSetWindowAttribute(hwnd, attribute, &dark as *const u32 as *const c_void, 4);
+            }
+            DwmSetWindowAttribute(hwnd, 35, &caption as *const u32 as *const c_void, 4);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn dark_title_bar(_title: &str) {}
+
 pub struct App {
     ctx: Ctx,
     state: Option<Box<dyn State>>,
     transition: Option<Transition>,
     pending: Option<Factory>,
     first_frame: bool,
+    centered: bool,
     last_time: f64,
     tray: SoundTray,
     fps: FpsCounter,
@@ -298,6 +347,7 @@ impl App {
             transition: None,
             pending: Some(first),
             first_frame: true,
+            centered: false,
             last_time: miniquad::date::now(),
             tray: SoundTray { y: -60.0, timer: 0.0, visible: false, label: None },
             fps: FpsCounter { times: Vec::new(), cache_count: 0, current: 0, text: None },
@@ -375,6 +425,11 @@ impl App {
 
 impl EventHandler for App {
     fn update(&mut self) {
+        if !self.centered {
+            self.centered = true;
+            center_window();
+            dark_title_bar("Friday Night Funkin'");
+        }
         let now = miniquad::date::now();
         let elapsed = (now - self.last_time).clamp(0.0, 0.1);
         self.last_time = now;
@@ -394,7 +449,6 @@ impl EventHandler for App {
 
         let mut finished_in = false;
         let mut finished_out = false;
-        let blocking = self.transition.is_some();
         if let Some(t) = self.transition.as_mut() {
             if t.update(elapsed) {
                 if t.going_out {
@@ -405,11 +459,8 @@ impl EventHandler for App {
             }
         }
         if let Some(mut state) = self.state.take() {
-            let run = !blocking || self.first_frame || state.persistent_update();
             self.first_frame = false;
-            if run {
-                state.update(&mut self.ctx);
-            }
+            state.update(&mut self.ctx);
             if finished_in {
                 self.transition = None;
                 state.trans_in_done(&mut self.ctx);

@@ -62,6 +62,12 @@ impl ChartEvent {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Drain {
+    pub amount: f64,
+    pub floor: f64,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Difficulty {
     pub name: String,
@@ -71,11 +77,12 @@ pub struct Difficulty {
     pub voices: Option<String>,
     pub timing: Option<Vec<TimingPoint>>,
     pub events: Option<Vec<ChartEvent>>,
+    pub drain: Option<Drain>,
 }
 
 impl Difficulty {
     pub fn new(name: &str, speed: f64) -> Difficulty {
-        Difficulty { name: difficulty_id(name), speed, notes: Vec::new(), inst: None, voices: None, timing: None, events: None }
+        Difficulty { name: difficulty_id(name), speed, notes: Vec::new(), inst: None, voices: None, timing: None, events: None, drain: None }
     }
 }
 
@@ -119,6 +126,7 @@ pub struct Song {
     pub inst: Option<String>,
     pub voices: Option<String>,
     pub valid_score: bool,
+    pub drain: Option<Drain>,
 }
 
 impl Song {
@@ -245,6 +253,11 @@ fn parse_events(value: Option<&Value>) -> Option<Vec<ChartEvent>> {
     Some(events)
 }
 
+fn parse_drain(value: Option<&Value>) -> Option<Drain> {
+    let v = value?;
+    Some(Drain { amount: v.get("amount").map(num).unwrap_or(0.023), floor: v.get("floor").map(num).unwrap_or(25.0) })
+}
+
 fn parse_difficulty(name: &str, d: &Value) -> Difficulty {
     let mut difficulty = Difficulty::new(name, d.get("speed").map(num).filter(|s| *s > 0.0).unwrap_or(1.0));
     difficulty.notes = d
@@ -268,6 +281,7 @@ fn parse_difficulty(name: &str, d: &Value) -> Difficulty {
     }
     difficulty.timing = parse_timing(d.get("timing"));
     difficulty.events = parse_events(d.get("events"));
+    difficulty.drain = parse_drain(d.get("opponent_drain"));
     difficulty
 }
 
@@ -306,6 +320,9 @@ fn write_difficulty(d: &Difficulty) -> String {
             audio.push(format!("\"voices\": {}", quote(voices)));
         }
         fields.push(format!("\t\t\t\"audio\": {{{}}}", audio.join(", ")));
+    }
+    if let Some(drain) = &d.drain {
+        fields.push(format!("\t\t\t\"opponent_drain\": {{\"amount\": {}, \"floor\": {}}}", number(drain.amount), number(drain.floor)));
     }
     if let Some(timing) = &d.timing {
         fields.push(format!("\t\t\t\"timing\": {}", write_timing(timing, "\t\t\t")));
@@ -383,6 +400,7 @@ impl ChartFile {
             inst: chart.inst.clone(),
             voices: chart.voices.clone(),
             valid_score: self.valid_score,
+            drain: chart.drain,
         })
     }
 

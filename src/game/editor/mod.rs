@@ -77,7 +77,7 @@ enum Drag {
     None,
     Place(usize),
     Move { start_step: f64, start_column: i64, moved: bool },
-    Select { x: f64, y: f64 },
+    Select { anchor_x: f64, anchor_time: f64, button: usize },
     Seek,
 }
 
@@ -138,6 +138,8 @@ pub struct Editor {
     previews: Vec<Preview>,
     prev_time: f64,
     loaded_audio: (Option<String>, Option<String>),
+    select_base: Vec<bool>,
+    scrub_resume: bool,
     new_difficulty: String,
     copy_notes: bool,
     confirm_delete: f64,
@@ -288,6 +290,8 @@ impl Editor {
             previews,
             prev_time: 0.0,
             loaded_audio: (None, None),
+            select_base: Vec::new(),
+            scrub_resume: false,
             new_difficulty: String::new(),
             copy_notes: true,
             confirm_delete: 0.0,
@@ -504,15 +508,19 @@ impl Editor {
         if self.playing {
             self.stop();
         } else {
-            if self.time >= self.length - 1.0 {
-                self.time = 0.0;
-            }
-            self.playing = true;
-            self.last_tick = self.time;
-            self.apply_audio_settings();
-            self.inst.play(&mut ctx.audio, true, self.time);
-            self.voices.play(&mut ctx.audio, true, self.time);
+            self.play_from_playhead(ctx);
         }
+    }
+
+    fn play_from_playhead(&mut self, ctx: &mut Ctx) {
+        if self.time >= self.length - 1.0 {
+            self.time = 0.0;
+        }
+        self.playing = true;
+        self.last_tick = self.time;
+        self.apply_audio_settings();
+        self.inst.play(&mut ctx.audio, true, self.time);
+        self.voices.play(&mut ctx.audio, true, self.time);
     }
 
     fn stop(&mut self) {
@@ -1049,6 +1057,12 @@ impl Editor {
         }
     }
 
+    fn begin_select(&mut self, ctx: &Ctx, button: usize) {
+        let keep = ctx.keys.ctrl() || ctx.keys.shift();
+        self.select_base = if keep { self.selected.clone() } else { vec![false; self.selected.len()] };
+        self.drag = Drag::Select { anchor_x: ctx.mouse.x, anchor_time: self.time_of(ctx.mouse.y), button };
+    }
+
     fn grid_mouse(&mut self, ctx: &mut Ctx) {
         let (mx, my) = (ctx.mouse.x, ctx.mouse.y);
         let in_grid = (TOP..BOTTOM).contains(&my) && mx >= EVENT_X && mx < GRID_RIGHT;
@@ -1108,24 +1122,27 @@ impl Editor {
                 }
                 return;
             }
-            Drag::Select { x, y } => {
-                if !ctx.mouse.pressed(1) {
-                    let area = Rect::new(x.min(mx), y.min(my), (x - mx).abs(), (y - my).abs());
-                    if !ctx.keys.ctrl() {
-                        self.clear_selection();
+            Drag::Select { anchor_x, anchor_time, button } => {
+                if ctx.mouse.pressed(button) {
+                    if my > BOTTOM - 28.0 {
+                        self.seek(ctx, self.time + ctx.elapsed * 600.0);
+                    } else if my < TOP + 28.0 {
+                        self.seek(ctx, self.time - ctx.elapsed * 600.0);
                     }
-                    let hits: Vec<bool> = self
-                        .notes()
-                        .iter()
-                        .map(|n| {
-                            let nx = column_x(column_of(n.side, n.lane)) + GRID / 2.0;
-                            let ny = self.y_of(n.time) + GRID / 2.0;
-                            area.contains(nx, ny)
-                        })
-                        .collect();
-                    for (s, hit) in self.selected.iter_mut().zip(hits) {
-                        *s |= hit;
+                    let now = self.time_of(my.clamp(TOP, BOTTOM));
+                    let (t0, t1) = (anchor_time.min(now), anchor_time.max(now));
+                    let (ca, cb) = (nearest_column(anchor_x), nearest_column(mx));
+                    let (c0, c1) = (ca.min(cb), ca.max(cb));
+                    let notes = self.notes().clone();
+                    for (i, note) in notes.iter().enumerate() {
+                        let column = column_of(note.side, note.lane);
+                        let inside = note.time >= t0 - 0.5 && note.time <= t1 + 0.5 && (c0..=c1).contains(&column);
+                        let base = self.select_base.get(i).copied().unwrap_or(false);
+                        if let Some(s) = self.selected.get_mut(i) {
+                            *s = base || inside;
+                        }
                     }
+                } else {
                     self.drag = Drag::None;
                 }
                 return;
@@ -1133,9 +1150,14 @@ impl Editor {
             Drag::Seek => {
                 if ctx.mouse.pressed(0) {
                     let t = ((my - TOP) / (BOTTOM - TOP)).clamp(0.0, 1.0) * self.length;
-                    self.seek(ctx, t);
+                    self.time = t.clamp(0.0, self.length.max(0.0));
+                    self.last_tick = self.time;
                 } else {
                     self.drag = Drag::None;
+                    if self.scrub_resume {
+                        self.scrub_resume = false;
+                        self.play_from_playhead(ctx);
+                    }
                 }
                 return;
             }
@@ -1145,12 +1167,15 @@ impl Editor {
             return;
         }
         if ctx.mouse.just_pressed(0) && minimap.contains(mx, my) {
+            self.scrub_resume = self.playing;
+            self.stop();
             self.drag = Drag::Seek;
             return;
         }
         if !in_grid {
-            if ctx.mouse.just_pressed(1) && mx > 40.0 && mx < 700.0 && (TOP..BOTTOM).contains(&my) {
-                self.drag = Drag::Select { x: mx, y: my };
+            let body = (40.0..720.0).contains(&mx) && (TOP..BOTTOM).contains(&my);
+            if body && (ctx.mouse.just_pressed(1) || (ctx.mouse.just_pressed(0) && ctx.keys.shift())) {
+                self.begin_select(ctx, if ctx.mouse.just_pressed(0) { 0 } else { 1 });
             }
             return;
         }
@@ -1181,7 +1206,7 @@ impl Editor {
         if ctx.mouse.just_pressed(0) {
             match self.note_at(column, my) {
                 Some(i) => {
-                    if ctx.keys.ctrl() {
+                    if ctx.keys.ctrl() || ctx.keys.shift() {
                         self.selected[i] = !self.selected[i];
                         return;
                     }
@@ -1202,6 +1227,10 @@ impl Editor {
                     self.tab = 3;
                 }
                 None => {
+                    if ctx.keys.shift() {
+                        self.begin_select(ctx, 0);
+                        return;
+                    }
                     if !ctx.keys.ctrl() {
                         self.clear_selection();
                     }
@@ -1219,7 +1248,7 @@ impl Editor {
                     remove[i] = true;
                     self.remove_notes(&remove);
                 }
-                None => self.drag = Drag::Select { x: mx, y: my },
+                None => self.begin_select(ctx, 1),
             }
         }
     }
@@ -1372,8 +1401,9 @@ impl Editor {
         if let Some(label) = hovered_event {
             self.ui.tooltip = Some(label);
         }
-        if let Drag::Select { x, y } = self.drag {
-            let area = Rect::new(x.min(mx), y.min(my), (x - mx).abs(), (y - my).abs());
+        if let Drag::Select { anchor_x, anchor_time, .. } = self.drag {
+            let top = self.y_of(anchor_time);
+            let area = Rect::new(anchor_x.min(mx), top.min(my), (anchor_x - mx).abs(), (top - my).abs());
             self.ui.fill(area, 0x307C5CFF);
             self.ui.outline(area, 1.0, ACCENT);
         }
@@ -1500,4 +1530,7 @@ impl State for Editor {
             preview.draw(dl);
         }
     }
+}
+fn nearest_column(x: f64) -> i64 {
+    column_at(x).unwrap_or(if x < OPPONENT_X { 1 } else { 8 }).max(1)
 }

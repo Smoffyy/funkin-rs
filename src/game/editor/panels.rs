@@ -3,7 +3,7 @@ use serde_json::Value;
 use crate::engine::app::Ctx;
 
 use super::super::library;
-use super::super::song::{difficulty_id, step_at, ChartFile, Difficulty, Side};
+use super::super::song::{difficulty_id, step_at, ChartFile, Difficulty, Drain, Side};
 use super::ui::{Rect, BORDER, PANEL, PANEL_LIGHT, TEXT, TEXT_DIM};
 use super::{event_label, format_time, Editor, EVENT_KINDS, SNAPS};
 
@@ -361,6 +361,33 @@ impl Editor {
             self.update_length();
         }
         y += ROW + 6.0;
+        let mut drain_on = current.drain.is_some();
+        if self.ui.checkbox("draintoggle", row(y), "Opponent drains player health", &mut drain_on) {
+            self.checkpoint();
+            self.current_mut().drain = if drain_on { Some(Drain { amount: 0.023, floor: 25.0 }) } else { None };
+        }
+        y += ROW;
+        if let Some(drain) = current.drain {
+            self.ui.label("Drain per hit", row(y));
+            let mut amount = drain.amount;
+            if self.ui.stepper("drainamount", field(y), &mut amount, 0.005, 0.0, 0.5, 3) {
+                self.checkpoint();
+                if let Some(d) = self.current_mut().drain.as_mut() {
+                    d.amount = amount;
+                }
+            }
+            y += ROW;
+            self.ui.label("Stops at (%)", row(y));
+            let mut floor = drain.floor;
+            if self.ui.stepper("drainfloor", field(y), &mut floor, 5.0, 0.0, 100.0, 0) {
+                self.checkpoint();
+                if let Some(d) = self.current_mut().drain.as_mut() {
+                    d.floor = floor;
+                }
+            }
+            y += ROW;
+        }
+        y += 6.0;
         let names: Vec<String> = self.chart.difficulties.iter().map(|d| d.name.to_uppercase()).collect();
         self.ui.label("Copy notes from", row(y));
         let mut from = self.copy_from.min(names.len() - 1);

@@ -34,7 +34,7 @@ Settings, key bindings and high scores are saved to `%APPDATA%\funkin-rs\save.js
 | Autoplay | F6 |
 | Chart editor | 7 (in freeplay or during a song) |
 
-Note and menu keys can be rebound in Options.
+Note and menu keys can be rebound in Options. The pause menu has a **Settings** entry that opens the options mid-song; when you go back, the song counts down 3, 2, 1 and continues from where you paused, with any changes applied.
 
 ## Differences from 0.2.8
 

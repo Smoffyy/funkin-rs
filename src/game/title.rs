@@ -190,10 +190,6 @@ impl Title {
 }
 
 impl State for Title {
-    fn persistent_update(&self) -> bool {
-        true
-    }
-
     fn update(&mut self, ctx: &mut Ctx) {
         if self.start_timer.update(ctx.elapsed) {
             self.start_intro(ctx);

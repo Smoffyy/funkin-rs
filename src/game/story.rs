@@ -249,10 +249,6 @@ impl StoryMenu {
 }
 
 impl State for StoryMenu {
-    fn persistent_update(&self) -> bool {
-        true
-    }
-
     fn update(&mut self, ctx: &mut Ctx) {
         self.lerp_score = lerp(self.lerp_score, self.intended_score as f64, frame_lerp(ctx.elapsed, 0.5));
         self.score_text.set_text(&format!("WEEK SCORE:{}", haxe_round(self.lerp_score) as i64));

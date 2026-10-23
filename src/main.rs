@@ -14,6 +14,7 @@ fn pixels<const N: usize>(png: &[u8]) -> [u8; N] {
 }
 
 fn main() {
+    let samples = game::msaa_samples();
     let icon = Icon {
         small: pixels(include_bytes!("../assets/art/icon16.png")),
         medium: pixels(include_bytes!("../assets/art/icon32.png")),
@@ -25,7 +26,7 @@ fn main() {
         window_height: 720,
         high_dpi: true,
         fullscreen: false,
-        sample_count: 1,
+        sample_count: samples,
         window_resizable: true,
         icon: Some(icon),
         platform: Platform { swap_interval: Some(0), ..Default::default() },

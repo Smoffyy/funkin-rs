@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
 use crate::engine::app::{Ctx, State};
@@ -47,6 +47,21 @@ enum Cutscene {
     WhiteIn,
     Dialogue,
     LightsOff,
+}
+
+pub struct Resume {
+    pub time: f64,
+    pub health: f64,
+    pub score: i64,
+    pub combo: i64,
+    pub cam_follow: Point,
+}
+
+struct HoldSpan {
+    top: f64,
+    top_index: usize,
+    bottom: f64,
+    bottom_index: usize,
 }
 
 struct SongClock {
@@ -142,7 +157,12 @@ impl PlayState {
             None => library::chart(ctx, "tutorial", "normal").expect("tutorial chart missing"),
         };
         let playtesting = ctx.data.session.editor.is_some();
-        let start_time = if playtesting { ctx.data.session.playtest_start.max(0.0) } else { 0.0 };
+        let resume = ctx.data.session.resume.take();
+        let start_time = match &resume {
+            Some(r) => r.time,
+            None if playtesting => ctx.data.session.playtest_start.max(0.0),
+            None => 0.0,
+        };
         ctx.data.conductor.map_bpm_changes(&song);
         ctx.data.conductor.change_bpm(song.bpm());
         ctx.data.conductor.offset = ctx.data.prefs.offset - song.offset;
@@ -207,7 +227,7 @@ impl PlayState {
         let strum_line_y = if downscroll { GAME_HEIGHT - 150.0 } else { 50.0 };
 
         let mut cam_follow = cam_pos;
-        if let Some(prev) = ctx.data.session.prev_cam_follow.take() {
+        if let Some(prev) = resume.as_ref().map(|r| r.cam_follow).or(ctx.data.session.prev_cam_follow.take()) {
             cam_follow = prev;
         }
         {
@@ -268,9 +288,9 @@ impl PlayState {
             camera_right_side: false,
             persistent_update: true,
             persistent_draw: true,
-            health: 1.0,
-            combo: 0,
-            song_score: 0,
+            health: resume.as_ref().map(|r| r.health).unwrap_or(1.0),
+            combo: resume.as_ref().map(|r| r.combo).unwrap_or(0),
+            song_score: resume.as_ref().map(|r| r.score).unwrap_or(0),
             gf_speed: 1,
             default_cam_zoom,
             start_timer: Timer::new(),
@@ -499,6 +519,16 @@ impl PlayState {
                     self.notes[i].sprite.x += GAME_WIDTH / 2.0;
                 }
                 order.push(i);
+            }
+            if chart.length > 0.0 {
+                let body_last = order[order.len() - 2];
+                let span = end - self.notes[body_last].strum_time;
+                let shift = self.notes[body_last].shift;
+                let fh = self.notes[body_last].sprite.frame_height();
+                let travel = span * 0.45 * round_decimal(speed, 2);
+                let px = if ctx.data.prefs.downscroll { travel + shift } else { (travel - shift).max(0.0) };
+                self.notes[body_last].sprite.scale.y = px / fh;
+                self.notes[body_last].sprite.update_hitbox();
             }
             self.notes[index].must_press = gotta_hit;
             if gotta_hit {
@@ -1062,7 +1092,7 @@ impl PlayState {
                 continue;
             }
             let prev = self.notes[i].prev;
-            let (prev_good, prev_height) = (self.notes[prev].was_good_hit, self.notes[prev].sprite.height);
+            let prev_good = self.notes[prev].was_good_hit;
             let n = &mut self.notes[i];
             let offscreen = if downscroll { n.sprite.y < -n.sprite.height } else { n.sprite.y > GAME_HEIGHT };
             n.sprite.active = !offscreen;
@@ -1071,10 +1101,10 @@ impl PlayState {
             if downscroll {
                 n.sprite.y = self.strum_line_y + (pos - n.strum_time) * (0.45 * speed);
                 if n.is_sustain {
-                    if n.is_end() && prev != i {
-                        n.sprite.y += prev_height;
+                    if n.is_end() {
+                        n.sprite.y -= n.sprite.height;
                     } else {
-                        n.sprite.y += n.sprite.height / 2.0;
+                        n.sprite.y += n.shift - n.sprite.height;
                     }
                     if clip_ready && n.sprite.y - n.sprite.offset.y * n.sprite.scale.y + n.sprite.height >= strum_mid {
                         let fw = n.sprite.frame_width();
@@ -1085,6 +1115,9 @@ impl PlayState {
                 }
             } else {
                 n.sprite.y = self.strum_line_y - (pos - n.strum_time) * (0.45 * speed);
+                if n.is_sustain && !n.is_end() {
+                    n.sprite.y += n.shift;
+                }
                 if n.is_sustain && clip_ready && n.sprite.y + n.sprite.offset.y * n.sprite.scale.y <= strum_mid {
                     let w = n.sprite.width / n.sprite.scale.x;
                     let h = n.sprite.height / n.sprite.scale.y;
@@ -1104,6 +1137,12 @@ impl PlayState {
                     self.light_strum(self.notes[i].data);
                 }
                 self.dad.hold_timer = 0.0;
+                if let (Some(drain), false) = (self.song.drain, self.notes[i].is_sustain) {
+                    let floor = 2.0 * drain.floor / 100.0;
+                    if self.health > floor {
+                        self.health = (self.health - drain.amount).max(floor);
+                    }
+                }
                 if self.song.needs_voices {
                     self.vocals.set_volume(1.0);
                 }
@@ -1188,6 +1227,13 @@ impl PlayState {
         }
     }
 
+    fn open_settings(&mut self, ctx: &mut Ctx) {
+        ctx.data.session.resume = Some(Resume { time: ctx.data.conductor.song_position, health: self.health, score: self.song_score, combo: self.combo, cam_follow: self.cam_follow });
+        self.vocals.stop();
+        ctx.audio.music.stop();
+        ctx.switch_state(|ctx| Box::new(super::options::Options::in_song(ctx)));
+    }
+
     fn open_pause(&mut self, ctx: &mut Ctx) {
         self.persistent_update = false;
         self.persistent_draw = true;
@@ -1229,6 +1275,41 @@ impl PlayState {
         let pos = self.bf.sprite.screen_position(ctx.cameras[CAM_GAME].scroll_x, ctx.cameras[CAM_GAME].scroll_y);
         self.sub = Sub::GameOver(GameOver::new(ctx, pos.x, pos.y, self.pixel));
         self.sub_fresh = true;
+    }
+
+    fn draw_holds(&self, dl: &mut DrawList, downscroll: bool) {
+        let strum_mid = self.strum_line_y + SWAG_WIDTH / 2.0;
+        let mut chains: HashMap<usize, HoldSpan> = HashMap::new();
+        for &i in &self.alive {
+            let n = &self.notes[i];
+            if !n.is_sustain || n.is_end() {
+                continue;
+            }
+            let top = n.sprite.y;
+            let bottom = n.sprite.y + n.sprite.height;
+            let span = chains.entry(n.head).or_insert(HoldSpan { top, top_index: i, bottom, bottom_index: i });
+            if top < span.top {
+                span.top = top;
+                span.top_index = i;
+            }
+            if bottom > span.bottom {
+                span.bottom = bottom;
+                span.bottom_index = i;
+            }
+        }
+        for span in chains.values() {
+            let (mut top, mut bottom) = (span.top, span.bottom);
+            if downscroll {
+                if self.notes[span.bottom_index].sprite.clipped() {
+                    bottom = bottom.min(strum_mid);
+                }
+            } else if self.notes[span.top_index].sprite.clipped() {
+                top = top.max(strum_mid);
+            }
+            if bottom > top {
+                self.notes[span.top_index].sprite.draw_strip(dl, CAM_HUD, top, bottom - top);
+            }
+        }
     }
 
     fn focus_on_player(&self, time: f64) -> bool {
@@ -1463,6 +1544,7 @@ impl State for PlayState {
                 match menu.update(ctx) {
                     Some(PauseAction::Resume) => self.close_pause(ctx),
                     Some(PauseAction::Restart) => ctx.switch_state(|ctx| Box::new(PlayState::new(ctx))),
+                    Some(PauseAction::Settings) => self.open_settings(ctx),
                     Some(PauseAction::Exit) => {
                         ctx.data.session.seen_cutscene = false;
                         ctx.data.session.death_counter = 0;
@@ -1486,10 +1568,6 @@ impl State for PlayState {
         }
     }
 
-    fn persistent_update(&self) -> bool {
-        true
-    }
-
     fn draw(&mut self, ctx: &mut Ctx, dl: &mut DrawList) {
         if self.persistent_draw || matches!(self.sub, Sub::None) {
             self.stage.draw_back(dl, CAM_GAME);
@@ -1500,8 +1578,9 @@ impl State for PlayState {
             for s in &self.strums {
                 s.draw(dl, CAM_HUD);
             }
+            self.draw_holds(dl, ctx.data.prefs.downscroll);
             for &i in &self.alive {
-                if self.notes[i].is_sustain {
+                if self.notes[i].is_sustain && self.notes[i].is_end() {
                     self.notes[i].sprite.draw(dl, CAM_HUD);
                 }
             }

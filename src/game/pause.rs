@@ -15,10 +15,11 @@ use super::alphabet::Alphabet;
 pub enum PauseAction {
     Resume,
     Restart,
+    Settings,
     Exit,
 }
 
-const MAIN: [&str; 5] = ["Resume", "Restart Song", "Change Difficulty", "Toggle Practice Mode", "Exit to menu"];
+const MAIN: [&str; 6] = ["Resume", "Restart Song", "Change Difficulty", "Toggle Practice Mode", "Settings", "Exit to menu"];
 
 pub struct PauseMenu {
     song: Rc<Song>,
@@ -153,6 +154,7 @@ impl PauseMenu {
                 None
             }
             "Restart Song" => Some(PauseAction::Restart),
+            "Settings" => Some(PauseAction::Settings),
             _ => Some(PauseAction::Exit),
         };
         if action.is_some() {

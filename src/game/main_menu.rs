@@ -56,7 +56,7 @@ impl MainMenu {
         let magenta = if ctx.data.prefs.flashing_menu {
             let mut m = Sprite::with_frames(0.0, 0.0, ctx.image("menuDesat"));
             m.scroll = bg.scroll;
-            m.set_graphic_size(bg.width as i64, 0);
+            m.set_graphic_size(bg.width as i64, bg.height as i64);
             m.update_hitbox();
             m.x = bg.x;
             m.y = bg.y;
@@ -100,7 +100,7 @@ impl MainMenu {
             magenta_flicker: Flicker::default(),
             items,
             selected: 0,
-            enabled: false,
+            enabled: true,
             busy: false,
             item_flicker: Flicker::default(),
             exit_timer: Timer::new(),
@@ -130,13 +130,6 @@ impl MainMenu {
 }
 
 impl State for MainMenu {
-    fn persistent_update(&self) -> bool {
-        true
-    }
-
-    fn trans_in_done(&mut self, _ctx: &mut Ctx) {
-        self.enabled = true;
-    }
 
     fn update(&mut self, ctx: &mut Ctx) {
         if ctx.audio.music.volume() < 0.8 {

@@ -84,6 +84,10 @@ impl Assets {
         Some(texture)
     }
 
+    pub fn registered(&self, key: &str) -> Option<Rc<Frames>> {
+        self.frames.get(key).cloned()
+    }
+
     pub fn register(&mut self, key: &str, frames: Frames) -> Rc<Frames> {
         let rc = Rc::new(frames);
         self.frames.insert(key.to_string(), rc.clone());

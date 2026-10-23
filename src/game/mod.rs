@@ -24,6 +24,10 @@ use std::path::PathBuf;
 
 pub use data::GameData;
 
+pub fn msaa_samples() -> i32 {
+    data::Prefs::load(&crate::engine::save::Save::open("funkin-rs")).msaa as i32
+}
+
 use crate::engine::app::{App, Ctx, State};
 use crate::engine::assets::Assets;
 

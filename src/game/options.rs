@@ -6,7 +6,7 @@ use crate::engine::gfx::{DrawList, GAME_HEIGHT, GAME_WIDTH};
 use crate::engine::input::key_name;
 use crate::engine::sprite::{Axes, Sprite};
 
-use super::data::{Control, Input};
+use super::data::{Control, Input, Prefs};
 use super::library;
 use super::alphabet::{Alphabet, Font};
 use super::widgets::Flicker;
@@ -15,8 +15,11 @@ use super::widgets::Flicker;
 enum Page {
     Options,
     Preferences,
+    Graphics,
     Controls,
 }
+
+const MSAA_LEVELS: [u32; 4] = [1, 2, 4, 8];
 
 #[derive(Clone, Copy, PartialEq)]
 enum Pref {
@@ -53,11 +56,18 @@ pub struct Options {
     flicker: Flicker,
     flicker_target: (Page, usize),
     option_items: Vec<Alphabet>,
+    option_labels: Vec<&'static str>,
+    in_song: bool,
     option_selected: usize,
     pref_items: Vec<Alphabet>,
     pref_values: Vec<Alphabet>,
     pref_selected: usize,
     pref_cam: usize,
+    graphics_items: Vec<Alphabet>,
+    graphics_values: Vec<Alphabet>,
+    graphics_selected: usize,
+    graphics_cam: usize,
+    graphics_note: Alphabet,
     control_headers: Vec<Alphabet>,
     control_labels: Vec<Alphabet>,
     bindings: Vec<Binding>,
@@ -81,12 +91,24 @@ fn pref_value(ctx: &Ctx, pref: Pref) -> bool {
     }
 }
 
+fn graphics_value(prefs: &Prefs) -> String {
+    if prefs.msaa <= 1 { "OFF".to_string() } else { format!("{}X", prefs.msaa) }
+}
+
 fn on_off(value: bool) -> &'static str {
     if value { "ON" } else { "OFF" }
 }
 
 impl Options {
     pub fn new(ctx: &mut Ctx) -> Options {
+        Options::build(ctx, false)
+    }
+
+    pub fn in_song(ctx: &mut Ctx) -> Options {
+        Options::build(ctx, true)
+    }
+
+    fn build(ctx: &mut Ctx, in_song: bool) -> Options {
         ctx.trans_in = ctx.default_trans_in;
         ctx.trans_out = ctx.default_trans_out;
         let mut bg = Sprite::with_frames(0.0, 0.0, ctx.image("menuDesat"));
@@ -98,7 +120,12 @@ impl Options {
         bg.scroll.set(0.0, 0.0);
 
         let mut option_items = Vec::new();
-        for (i, label) in ["PREFERENCES", "CONTROLS", "CHART EDITOR", "EXIT"].iter().enumerate() {
+        let option_labels: Vec<&'static str> = if in_song {
+            vec!["PREFERENCES", "CONTROLS", "GRAPHICS", "EXIT"]
+        } else {
+            vec!["PREFERENCES", "CONTROLS", "GRAPHICS", "CHART EDITOR", "EXIT"]
+        };
+        for (i, label) in option_labels.iter().enumerate() {
             let mut t = Alphabet::atlas(ctx, 0.0, 100.0 + i as f64 * 100.0, label, Font::Bold);
             t.screen_center_x();
             t.scroll.set(0.0, 0.0);
@@ -116,6 +143,20 @@ impl Options {
             let value = pref_value(ctx, *pref);
             pref_values.push(Alphabet::atlas(ctx, 0.0, y + 14.0, on_off(value), Font::Default));
         }
+        let mut graphics_cam = Camera::transparent();
+        graphics_cam.visible = false;
+        let graphics_cam = ctx.add_camera(graphics_cam);
+        let mut graphics_items = Vec::new();
+        let mut graphics_values = Vec::new();
+        for (i, label) in ["ANTIALIASING"].iter().enumerate() {
+            let y = 120.0 * i as f64 + 30.0;
+            graphics_items.push(Alphabet::atlas(ctx, 120.0, y, label, Font::Bold));
+            let value = graphics_value(&ctx.data.prefs);
+            graphics_values.push(Alphabet::atlas(ctx, 0.0, y + 14.0, &value, Font::Default));
+        }
+        let mut graphics_note = Alphabet::atlas(ctx, 0.0, 330.0, "RESTART TO APPLY CHANGES", Font::Default);
+        graphics_note.screen_center_x();
+        graphics_note.scroll.set(0.0, 0.0);
         {
             let y = pref_items[0].y;
             let cam = ctx.camera(pref_cam);
@@ -184,16 +225,23 @@ impl Options {
         let mut o = Options {
             bg,
             page: Page::Options,
-            enabled: false,
+            enabled: true,
             busy: false,
             flicker: Flicker::default(),
             flicker_target: (Page::Options, 0),
             option_items,
+            option_labels,
+            in_song,
             option_selected: 0,
             pref_items,
             pref_values,
             pref_selected: 0,
             pref_cam,
+            graphics_items,
+            graphics_values,
+            graphics_selected: 0,
+            graphics_cam,
+            graphics_note,
             control_headers,
             control_labels,
             bindings,
@@ -205,6 +253,7 @@ impl Options {
         };
         o.refresh_options();
         o.refresh_prefs();
+        o.refresh_graphics();
         o.refresh_bindings(ctx);
         o
     }
@@ -236,6 +285,7 @@ impl Options {
     fn set_page(&mut self, ctx: &mut Ctx, page: Page) {
         self.page = page;
         ctx.camera(self.pref_cam).visible = page == Page::Preferences;
+        ctx.camera(self.graphics_cam).visible = page == Page::Graphics;
         ctx.camera(self.control_cam).visible = page == Page::Controls;
     }
 
@@ -246,21 +296,29 @@ impl Options {
         self.flicker_target = (page, index);
     }
 
+    fn leave(&mut self, ctx: &mut Ctx) {
+        self.enabled = false;
+        if self.in_song {
+            ctx.switch_state(|ctx| Box::new(super::play::PlayState::new(ctx)));
+        } else {
+            ctx.switch_state(|ctx| Box::new(super::main_menu::MainMenu::new(ctx)));
+        }
+    }
+
     fn fire(&mut self, ctx: &mut Ctx, page: Page, index: usize) {
         match page {
-            Page::Options => match index {
-                0 => self.set_page(ctx, Page::Preferences),
-                1 => self.set_page(ctx, Page::Controls),
-                2 => {
+            Page::Options => match self.option_labels[index] {
+                "PREFERENCES" => self.set_page(ctx, Page::Preferences),
+                "CONTROLS" => self.set_page(ctx, Page::Controls),
+                "GRAPHICS" => self.set_page(ctx, Page::Graphics),
+                "CHART EDITOR" => {
                     self.enabled = false;
                     ctx.switch_state(|ctx| Box::new(super::editor::Editor::blank(ctx)));
                 }
-                _ => {
-                    self.enabled = false;
-                    ctx.switch_state(|ctx| Box::new(super::main_menu::MainMenu::new(ctx)));
-                }
+                _ => self.leave(ctx),
             },
             Page::Preferences => self.toggle_pref(ctx, index),
+            Page::Graphics => self.step_graphics(ctx, index, 1),
             Page::Controls => self.prompt_open = true,
         }
     }
@@ -282,6 +340,29 @@ impl Options {
         self.pref_values[index].set_text(on_off(value));
         ctx.show_fps = ctx.data.prefs.fps_counter;
         ctx.data.prefs.store(&mut ctx.save);
+    }
+
+    fn adjust_value(&mut self, ctx: &mut Ctx, step: i64) {
+        match self.page {
+            Page::Preferences => self.toggle_pref(ctx, self.pref_selected),
+            Page::Graphics => self.step_graphics(ctx, self.graphics_selected, step),
+            _ => {}
+        }
+    }
+
+    fn step_graphics(&mut self, ctx: &mut Ctx, index: usize, step: i64) {
+        let prefs = &mut ctx.data.prefs;
+        let len = MSAA_LEVELS.len() as i64;
+        let pos = MSAA_LEVELS.iter().position(|level| *level == prefs.msaa).unwrap_or(0) as i64;
+        prefs.msaa = MSAA_LEVELS[(pos + step).rem_euclid(len) as usize];
+        self.graphics_values[index].set_text(&graphics_value(&ctx.data.prefs));
+        ctx.data.prefs.store(&mut ctx.save);
+    }
+
+    fn refresh_graphics(&mut self) {
+        for (i, item) in self.graphics_items.iter_mut().enumerate() {
+            item.set_alpha(if i == self.graphics_selected { 1.0 } else { 0.6 });
+        }
     }
 
     fn rebind(&mut self, ctx: &mut Ctx, key: KeyCode) {
@@ -330,9 +411,6 @@ impl Options {
 }
 
 impl State for Options {
-    fn trans_in_done(&mut self, _ctx: &mut Ctx) {
-        self.enabled = true;
-    }
 
     fn update(&mut self, ctx: &mut Ctx) {
         if self.busy {
@@ -340,6 +418,7 @@ impl State for Options {
             let item = match page {
                 Page::Options => &mut self.option_items[index],
                 Page::Preferences => &mut self.pref_items[index],
+                Page::Graphics => &mut self.graphics_items[index],
                 Page::Controls => &mut self.bindings[index].text,
             };
             let mut visible = item.visible;
@@ -357,7 +436,14 @@ impl State for Options {
             let item = &self.pref_items[i];
             value.x = item.x + item.width() + 30.0;
         }
-        if !self.enabled || self.busy {
+        for (i, item) in self.graphics_items.iter_mut().enumerate() {
+            item.x = if i == self.graphics_selected { 150.0 } else { 120.0 };
+        }
+        for (i, value) in self.graphics_values.iter_mut().enumerate() {
+            let item = &self.graphics_items[i];
+            value.x = item.x + item.width() + 30.0;
+        }
+        if !self.enabled {
             return;
         }
         if self.prompt_open {
@@ -376,12 +462,11 @@ impl State for Options {
                     self.option_selected = next;
                     self.refresh_options();
                 }
-                if ctx.just_pressed(Control::Accept) {
+                if !self.busy && ctx.just_pressed(Control::Accept) {
                     self.accept(ctx, Page::Options, self.option_selected);
-                } else if ctx.just_pressed(Control::Back) {
+                } else if !self.busy && ctx.just_pressed(Control::Back) {
                     library::play_sound(ctx, "cancelMenu", 1.0);
-                    self.enabled = false;
-                    ctx.switch_state(|ctx| Box::new(super::main_menu::MainMenu::new(ctx)));
+                    self.leave(ctx);
                 }
             }
             Page::Preferences => {
@@ -392,9 +477,32 @@ impl State for Options {
                     let y = self.pref_items[next].y;
                     ctx.camera(self.pref_cam).set_target_position(GAME_WIDTH / 2.0, y);
                 }
-                if ctx.just_pressed(Control::Accept) {
+                if ctx.just_pressed(Control::UiLeft) || ctx.just_pressed(Control::UiRight) {
+                    library::play_sound(ctx, "scrollMenu", 1.0);
+                    let step = if ctx.just_pressed(Control::UiRight) { 1 } else { -1 };
+                    self.adjust_value(ctx, step);
+                }
+                if !self.busy && ctx.just_pressed(Control::Accept) {
                     self.accept(ctx, Page::Preferences, self.pref_selected);
-                } else if ctx.just_pressed(Control::Back) {
+                } else if !self.busy && ctx.just_pressed(Control::Back) {
+                    library::play_sound(ctx, "cancelMenu", 1.0);
+                    self.set_page(ctx, Page::Options);
+                }
+            }
+            Page::Graphics => {
+                if let Some(next) = Self::nav(ctx, self.graphics_selected, self.graphics_items.len()) {
+                    library::play_sound(ctx, "scrollMenu", 1.0);
+                    self.graphics_selected = next;
+                    self.refresh_graphics();
+                }
+                if ctx.just_pressed(Control::UiLeft) || ctx.just_pressed(Control::UiRight) {
+                    library::play_sound(ctx, "scrollMenu", 1.0);
+                    let step = if ctx.just_pressed(Control::UiRight) { 1 } else { -1 };
+                    self.adjust_value(ctx, step);
+                }
+                if !self.busy && ctx.just_pressed(Control::Accept) {
+                    self.accept(ctx, Page::Graphics, self.graphics_selected);
+                } else if !self.busy && ctx.just_pressed(Control::Back) {
                     library::play_sound(ctx, "cancelMenu", 1.0);
                     self.set_page(ctx, Page::Options);
                 }
@@ -419,9 +527,9 @@ impl State for Options {
                     self.binding_selected = next;
                     self.refresh_bindings(ctx);
                 }
-                if ctx.just_pressed(Control::Accept) {
+                if !self.busy && ctx.just_pressed(Control::Accept) {
                     self.accept(ctx, Page::Controls, self.binding_selected);
-                } else if ctx.just_pressed(Control::Back) {
+                } else if !self.busy && ctx.just_pressed(Control::Back) {
                     library::play_sound(ctx, "cancelMenu", 1.0);
                     self.set_page(ctx, Page::Options);
                 }
@@ -445,6 +553,16 @@ impl State for Options {
                 for v in self.pref_values.iter_mut() {
                     v.draw(dl, cam);
                 }
+            }
+            Page::Graphics => {
+                let cam = self.graphics_cam;
+                for item in self.graphics_items.iter_mut() {
+                    item.draw(dl, cam);
+                }
+                for v in self.graphics_values.iter_mut() {
+                    v.draw(dl, cam);
+                }
+                self.graphics_note.draw(dl, cam);
             }
             Page::Controls => {
                 let cam = self.control_cam;

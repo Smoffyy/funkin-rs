@@ -356,4 +356,50 @@ impl Sprite {
         ];
         dl.quad(camera, Quad { texture: frames.texture.id, linear: self.antialiasing, effect: self.effect, vertices });
     }
+
+    pub fn clipped(&self) -> bool {
+        self.clip.is_some()
+    }
+
+    pub fn draw_strip(&self, dl: &mut DrawList, camera: usize, top: f64, height: f64) {
+        if !self.exists || !self.visible || self.alpha == 0.0 || height <= 0.0 {
+            return;
+        }
+        let Some(frames) = self.frames.as_ref() else { return };
+        let Some(frame) = self.frame() else { return };
+        let Some(layer) = dl.layer(camera) else { return };
+        if frame.empty {
+            return;
+        }
+        let left = self.x - layer.scroll[0] * self.scroll.x;
+        let top = top - layer.scroll[1] * self.scroll.y;
+        let width = self.width;
+        let mul = [
+            ((self.color >> 16) & 0xFF) as f32 / 255.0,
+            ((self.color >> 8) & 0xFF) as f32 / 255.0,
+            (self.color & 0xFF) as f32 / 255.0,
+            self.alpha as f32,
+        ];
+        let add = [
+            (self.color_offset[0] / 255.0) as f32,
+            (self.color_offset[1] / 255.0) as f32,
+            (self.color_offset[2] / 255.0) as f32,
+            (self.color_offset[3] / 255.0) as f32,
+        ];
+        let [u0, mut v0, u1, mut v1] = frame.uv;
+        if self.angle == 180.0 {
+            std::mem::swap(&mut v0, &mut v1);
+        }
+        let corner = |x: f64, y: f64, u: f64, v: f64| {
+            let (wx, wy) = layer.transform.apply(x, y);
+            Vertex { pos: [wx as f32, wy as f32], uv: [u as f32, v as f32], mul, add }
+        };
+        let vertices = [
+            corner(left, top, u0, v0),
+            corner(left + width, top, u1, v0),
+            corner(left, top + height, u0, v1),
+            corner(left + width, top + height, u1, v1),
+        ];
+        dl.quad(camera, Quad { texture: frames.texture.id, linear: self.antialiasing, effect: self.effect, vertices });
+    }
 }
