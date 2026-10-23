@@ -890,7 +890,7 @@ impl PlayState {
         self.health += 0.023;
         let data = self.notes[index].data;
         self.bf.play_anim(&format!("sing{}", COLORS[data]), true, false, 0);
-        for s in self.strums[4..].iter_mut() {
+        for s in self.strums.iter_mut().skip(4) {
             if s.id as usize == data {
                 s.play("confirm", true);
             }
@@ -902,15 +902,32 @@ impl PlayState {
         }
     }
 
-    fn center_strums(&mut self) {
+    fn center_strums(&mut self, player: usize) {
         let pixel = self.pixel;
-        for s in self.strums[4..].iter_mut() {
+        for s in self.strums.iter_mut().skip(player * 4).take(4) {
             s.center_offsets(false);
             if s.anim.name() == "confirm" && !pixel {
                 s.offset.x -= 13.0;
                 s.offset.y -= 13.0;
             }
         }
+    }
+
+    fn light_strum(&mut self, data: usize) {
+        for s in self.strums.iter_mut().take(4) {
+            if s.id as usize == data {
+                s.play("confirm", true);
+            }
+        }
+    }
+
+    fn update_opponent_strums(&mut self) {
+        for s in self.strums.iter_mut().take(4) {
+            if s.anim.name() == "confirm" && s.anim.finished() {
+                s.play("static", false);
+            }
+        }
+        self.center_strums(0);
     }
 
     fn autoplay(&mut self, ctx: &mut Ctx) {
@@ -929,12 +946,12 @@ impl PlayState {
                 self.bf.play_anim("idle", false, false, 0);
             }
         }
-        for s in self.strums[4..].iter_mut() {
+        for s in self.strums.iter_mut().skip(4) {
             if s.anim.name() == "confirm" && s.anim.finished() {
                 s.play("static", false);
             }
         }
-        self.center_strums();
+        self.center_strums(1);
     }
 
     fn key_shit(&mut self, ctx: &mut Ctx) {
@@ -985,9 +1002,10 @@ impl PlayState {
             }
             let notes = &self.notes;
             possible.sort_by_key(|&i| (notes[i].strum_time) as i64);
+            let ghost = ctx.data.prefs.ghost_tapping;
             if !possible.is_empty() {
                 for (d, pressed) in press.iter().enumerate() {
-                    if *pressed && !directions.contains(&d) {
+                    if *pressed && !ghost && !directions.contains(&d) {
                         self.note_miss(ctx, d);
                     }
                 }
@@ -996,7 +1014,7 @@ impl PlayState {
                         self.good_note_hit(ctx, i);
                     }
                 }
-            } else {
+            } else if !ghost {
                 for (d, pressed) in press.iter().enumerate() {
                     if *pressed {
                         self.note_miss(ctx, d);
@@ -1010,7 +1028,7 @@ impl PlayState {
                 self.bf.play_anim("idle", false, false, 0);
             }
         }
-        for s in self.strums[4..].iter_mut() {
+        for s in self.strums.iter_mut().skip(4) {
             let id = s.id as usize;
             if press[id] && s.anim.name() != "confirm" {
                 s.play("pressed", false);
@@ -1019,7 +1037,7 @@ impl PlayState {
                 s.play("static", false);
             }
         }
-        self.center_strums();
+        self.center_strums(1);
     }
 
     fn update_notes(&mut self, ctx: &mut Ctx) {
@@ -1078,6 +1096,9 @@ impl PlayState {
                 let name = format!("sing{}{}", COLORS[self.notes[i].data], alt);
                 let name = if self.dad.has_anim(&name) { name } else { format!("sing{}", COLORS[self.notes[i].data]) };
                 self.dad.play_anim(&name, true, false, 0);
+                if ctx.data.prefs.opponent_strums {
+                    self.light_strum(self.notes[i].data);
+                }
                 self.dad.hold_timer = 0.0;
                 if self.song.needs_voices {
                     self.vocals.set_volume(1.0);
@@ -1325,6 +1346,9 @@ impl PlayState {
         }
         if self.generated_music {
             self.update_notes(ctx);
+        }
+        if ctx.data.prefs.opponent_strums {
+            self.update_opponent_strums();
         }
         if ctx.keys.just_pressed(miniquad::KeyCode::F6) {
             self.botplay = !self.botplay;

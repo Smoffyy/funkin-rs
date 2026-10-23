@@ -25,14 +25,18 @@ enum Pref {
     CameraZoom,
     FpsCounter,
     AutoPause,
+    OpponentStrums,
+    GhostTapping,
 }
 
-const PREFS: [(&str, Pref); 5] = [
+const PREFS: [(&str, Pref); 7] = [
     ("downscroll", Pref::Downscroll),
     ("flashing menu", Pref::FlashingMenu),
     ("camera zooming on beat", Pref::CameraZoom),
     ("fps counter", Pref::FpsCounter),
     ("auto pause", Pref::AutoPause),
+    ("opponent note strums", Pref::OpponentStrums),
+    ("ghost tapping", Pref::GhostTapping),
 ];
 
 struct Binding {
@@ -72,6 +76,8 @@ fn pref_value(ctx: &Ctx, pref: Pref) -> bool {
         Pref::CameraZoom => p.camera_zoom,
         Pref::FpsCounter => p.fps_counter,
         Pref::AutoPause => p.auto_pause,
+        Pref::OpponentStrums => p.opponent_strums,
+        Pref::GhostTapping => p.ghost_tapping,
     }
 }
 
@@ -264,6 +270,8 @@ impl Options {
             Pref::CameraZoom => &mut prefs.camera_zoom,
             Pref::FpsCounter => &mut prefs.fps_counter,
             Pref::AutoPause => &mut prefs.auto_pause,
+            Pref::OpponentStrums => &mut prefs.opponent_strums,
+            Pref::GhostTapping => &mut prefs.ghost_tapping,
         };
         *flag = !*flag;
         let value = *flag;

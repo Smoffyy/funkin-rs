@@ -132,12 +132,14 @@ pub struct Prefs {
     pub camera_zoom: bool,
     pub fps_counter: bool,
     pub auto_pause: bool,
+    pub opponent_strums: bool,
+    pub ghost_tapping: bool,
     pub offset: f64,
 }
 
 impl Default for Prefs {
     fn default() -> Self {
-        Prefs { downscroll: false, flashing_menu: true, camera_zoom: true, fps_counter: true, auto_pause: false, offset: 0.0 }
+        Prefs { downscroll: false, flashing_menu: true, camera_zoom: true, fps_counter: true, auto_pause: false, opponent_strums: false, ghost_tapping: false, offset: 0.0 }
     }
 }
 
@@ -151,6 +153,8 @@ impl Prefs {
             p.camera_zoom = flag("camera-zoom", p.camera_zoom);
             p.fps_counter = flag("fps-counter", p.fps_counter);
             p.auto_pause = flag("auto-pause", p.auto_pause);
+            p.opponent_strums = flag("opponent-strums", p.opponent_strums);
+            p.ghost_tapping = flag("ghost-tapping", p.ghost_tapping);
             p.offset = map.get("offset").and_then(|v| v.as_f64()).unwrap_or(p.offset);
         }
         p
@@ -165,6 +169,8 @@ impl Prefs {
                 "camera-zoom": self.camera_zoom,
                 "fps-counter": self.fps_counter,
                 "auto-pause": self.auto_pause,
+                "opponent-strums": self.opponent_strums,
+                "ghost-tapping": self.ghost_tapping,
                 "offset": self.offset,
             }),
         );
