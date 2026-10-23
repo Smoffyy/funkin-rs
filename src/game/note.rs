@@ -2,6 +2,7 @@ use std::rc::Rc;
 
 use crate::engine::app::Ctx;
 use crate::engine::atlas::Frames;
+use crate::engine::math::round_decimal;
 use crate::engine::sprite::Sprite;
 
 use super::conductor::Conductor;
@@ -106,10 +107,10 @@ impl Note {
             }
             let p = prev.unwrap();
             if notes[p].is_sustain {
-                let step = ctx.data.conductor.step_crochet;
+                let span = strum_time - notes[p].strum_time;
                 let pn = &mut notes[p];
                 pn.sprite.play(&format!("{}hold", COLORS[pn.data]), false);
-                pn.sprite.scale.y *= step / 100.0 * 1.5 * speed;
+                pn.sprite.scale.y = span * 0.45 * round_decimal(speed, 2) / pn.sprite.frame_height();
                 pn.sprite.update_hitbox();
             }
         }

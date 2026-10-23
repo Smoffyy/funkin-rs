@@ -480,10 +480,18 @@ impl PlayState {
             self.notes[index].sprite.scroll.set(0.0, 0.0);
             order.push(index);
             let step = ctx.data.conductor.step_crochet;
-            let sus = (chart.length / step).floor() as i64;
-            for s in 0..sus.max(0) {
+            let end = chart.time + chart.length;
+            let mut times = Vec::new();
+            if chart.length > 0.0 {
+                let mut t = chart.time;
+                while t < end - 0.5 {
+                    times.push(t);
+                    t += step;
+                }
+                times.push(end);
+            }
+            for time in times {
                 let old = order.last().copied();
-                let time = chart.time + step * s as f64 + step;
                 let i = Note::create(ctx, &mut self.notes, time, data, old, true, speed, pixel);
                 self.notes[i].sprite.scroll.set(0.0, 0.0);
                 self.notes[i].must_press = gotta_hit;
@@ -1493,7 +1501,14 @@ impl State for PlayState {
                 s.draw(dl, CAM_HUD);
             }
             for &i in &self.alive {
-                self.notes[i].sprite.draw(dl, CAM_HUD);
+                if self.notes[i].is_sustain {
+                    self.notes[i].sprite.draw(dl, CAM_HUD);
+                }
+            }
+            for &i in &self.alive {
+                if !self.notes[i].is_sustain {
+                    self.notes[i].sprite.draw(dl, CAM_HUD);
+                }
             }
             self.health_bar_bg.draw(dl, CAM_HUD);
             self.health_bar.draw(ctx, dl, CAM_HUD);
