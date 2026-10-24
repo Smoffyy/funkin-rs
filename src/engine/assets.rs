@@ -297,8 +297,9 @@ impl Assets {
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/TTF/DejaVuSans.ttf",
         ];
-        for c in candidates {
-            if let Some(f) = fs::read(c).ok().and_then(|b| Font::from_bytes(b, FontSettings::default()).ok()) {
+        let bundled = self.find("fonts/VT323-Regular.ttf");
+        for path in candidates.into_iter().map(PathBuf::from).chain(bundled) {
+            if let Some(f) = fs::read(path).ok().and_then(|b| Font::from_bytes(b, FontSettings::default()).ok()) {
                 let f = Rc::new(f);
                 self.fallback_font = Some(f.clone());
                 return f;
