@@ -70,7 +70,9 @@ fn content_roots() -> Vec<PathBuf> {
 }
 
 pub fn boot() -> App {
-    let assets = Assets::new(content_roots());
+    let charts = charts_dir();
+    let mut assets = Assets::new(content_roots());
+    assets.start_preload(&charts);
     App::new(
         assets,
         |assets| {
@@ -87,7 +89,7 @@ pub fn boot() -> App {
                 conductor: Conductor::default(),
                 title_initialized: false,
                 characters: None,
-                charts_dir: charts_dir(),
+                charts_dir: charts,
             }
         },
         Box::new(|ctx: &mut Ctx| {

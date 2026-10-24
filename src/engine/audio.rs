@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -225,7 +225,7 @@ impl Sound {
 
 pub struct Audio {
     manager: Option<AudioManager<DefaultBackend>>,
-    cache: HashMap<String, Option<StaticSoundData>>,
+    cache: HashMap<PathBuf, Option<StaticSoundData>>,
     one_shots: Vec<Sound>,
     pub volume: f64,
     pub muted: bool,
@@ -250,16 +250,19 @@ impl Audio {
     }
 
     pub fn forget(&mut self, path: &Path) {
-        self.cache.remove(&path.to_string_lossy().to_string());
+        self.cache.remove(path);
+    }
+
+    pub fn store(&mut self, path: PathBuf, data: StaticSoundData) {
+        self.cache.insert(path, Some(data));
     }
 
     pub fn load(&mut self, path: &Path) -> Option<StaticSoundData> {
-        let key = path.to_string_lossy().to_string();
-        if let Some(cached) = self.cache.get(&key) {
+        if let Some(cached) = self.cache.get(path) {
             return cached.clone();
         }
         let data = StaticSoundData::from_file(path).ok();
-        self.cache.insert(key, data.clone());
+        self.cache.insert(path.to_path_buf(), data.clone());
         data
     }
 

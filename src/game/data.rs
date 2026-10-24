@@ -158,8 +158,7 @@ impl Prefs {
             p.auto_pause = flag("auto-pause", p.auto_pause);
             p.opponent_strums = flag("opponent-strums", p.opponent_strums);
             p.ghost_tapping = flag("ghost-tapping", p.ghost_tapping);
-            p.quick_transitions = flag("quick-transitions", p.quick_transitions);
-            p.offset = map.get("offset").and_then(|v| v.as_f64()).unwrap_or(p.offset);
+            p.quick_transitions = flag("quick-transitions", p.quick_transitions);            p.offset = map.get("offset").and_then(|v| v.as_f64()).unwrap_or(p.offset);
             p.msaa = map.get("msaa").and_then(|v| v.as_u64()).map(|v| v as u32).unwrap_or(p.msaa);
         }
         p
@@ -176,8 +175,7 @@ impl Prefs {
                 "auto-pause": self.auto_pause,
                 "opponent-strums": self.opponent_strums,
                 "ghost-tapping": self.ghost_tapping,
-                "quick-transitions": self.quick_transitions,
-                "offset": self.offset,
+                "quick-transitions": self.quick_transitions,                "offset": self.offset,
                 "msaa": self.msaa,
             }),
         );
