@@ -46,6 +46,8 @@ pub struct Settings {
     pub rate: f64,
     pub inst_volume: f64,
     pub voices_volume: f64,
+    pub player_volume: f64,
+    pub opponent_volume: f64,
     pub hit_player: bool,
     pub hit_opponent: bool,
     pub metronome: bool,
@@ -54,7 +56,7 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { rate: 1.0, inst_volume: 0.6, voices_volume: 1.0, hit_player: false, hit_opponent: false, metronome: false, waveform: 2 }
+        Settings { rate: 1.0, inst_volume: 0.6, voices_volume: 1.0, player_volume: 1.0, opponent_volume: 1.0, hit_player: false, hit_opponent: false, metronome: false, waveform: 2 }
     }
 }
 
@@ -97,9 +99,11 @@ pub struct Editor {
     time: f64,
     playing: bool,
     inst: Sound,
-    voices: Sound,
+    voices: Vec<Sound>,
     inst_wave: Option<Waveform>,
     voices_wave: Option<Waveform>,
+    player_wave: Option<Waveform>,
+    opponent_wave: Option<Waveform>,
     length: f64,
     zoom: f64,
     snap: usize,
@@ -137,7 +141,7 @@ pub struct Editor {
     origin: Origin,
     previews: Vec<Preview>,
     prev_time: f64,
-    loaded_audio: (Option<String>, Option<String>),
+    loaded_audio: [Option<String>; 4],
     select_base: Vec<bool>,
     scrub_resume: bool,
     new_difficulty: String,
@@ -249,9 +253,11 @@ impl Editor {
             time: 0.0,
             playing: false,
             inst: Sound::empty(),
-            voices: Sound::empty(),
+            voices: Vec::new(),
             inst_wave: None,
             voices_wave: None,
+            player_wave: None,
+            opponent_wave: None,
             length: 0.0,
             zoom: 1.0,
             snap: 3,
@@ -289,7 +295,7 @@ impl Editor {
             origin,
             previews,
             prev_time: 0.0,
-            loaded_audio: (None, None),
+            loaded_audio: [None, None, None, None],
             select_base: Vec::new(),
             scrub_resume: false,
             new_difficulty: String::new(),
@@ -304,46 +310,91 @@ impl Editor {
 
     fn load_audio(&mut self, ctx: &mut Ctx) {
         self.inst.stop();
-        self.voices.stop();
+        for voice in self.voices.iter_mut() {
+            voice.stop();
+        }
         let folder = library::chart_folder(ctx, &self.chart.id);
         for kind in ["Inst", "Voices"] {
             ctx.audio.forget(&folder.join(format!("{kind}.ogg")));
         }
-        let files = (self.current().inst.clone(), self.current().voices.clone());
-        for file in [&files.0, &files.1].into_iter().flatten() {
+        let files = self.audio_files();
+        for file in files.iter().flatten() {
             ctx.audio.forget(&folder.join(file));
         }
-        let inst = library::inst(ctx, &self.chart.id, &self.chart.name, files.0.as_deref());
-        let voices = library::voices(ctx, &self.chart.id, &self.chart.name, files.1.as_deref());
+        let inst = library::inst(ctx, &self.chart.id, &self.chart.name, files[0].as_deref());
+        let player = library::split_voices(ctx, &self.chart.id, files[2].as_deref());
+        let opponent = library::split_voices(ctx, &self.chart.id, files[3].as_deref());
+        let split = player.is_some() || opponent.is_some();
+        let combined = if split { None } else { library::voices(ctx, &self.chart.id, &self.chart.name, files[1].as_deref()) };
         self.loaded_audio = files;
         self.inst_wave = inst.as_ref().map(Waveform::new);
-        self.voices_wave = voices.as_ref().map(Waveform::new);
+        self.player_wave = player.as_ref().map(Waveform::new);
+        self.opponent_wave = opponent.as_ref().map(Waveform::new);
+        self.voices_wave = combined.as_ref().map(Waveform::new);
         self.inst = Sound::new(inst, 1.0, false);
-        self.voices = Sound::new(voices, 1.0, false);
+        self.voices = if split {
+            vec![Sound::new(player, 1.0, false), Sound::new(opponent, 1.0, false)]
+        } else {
+            vec![Sound::new(combined, 1.0, false)]
+        };
         self.apply_audio_settings();
         self.update_length();
+    }
+
+    fn split_vocals(&self) -> bool {
+        self.player_wave.is_some() || self.opponent_wave.is_some()
+    }
+
+    fn own_music(&self) -> bool {
+        self.current().inst.is_some() || self.current().voices.is_some()
+    }
+
+    fn audio_files(&self) -> [Option<String>; 4] {
+        let current = self.current();
+        if self.own_music() {
+            [current.inst.clone(), current.voices.clone(), current.player_voices.clone(), current.opponent_voices.clone()]
+        } else {
+            [None, None, self.chart.player_voices.clone(), self.chart.opponent_voices.clone()]
+        }
     }
 
     fn switch_difficulty(&mut self, ctx: &mut Ctx, index: usize) {
         self.difficulty = index;
         self.ensure_difficulty();
         self.selected_event = None;
-        let files = (self.current().inst.clone(), self.current().voices.clone());
-        if files != self.loaded_audio {
+        if self.audio_files() != self.loaded_audio {
             self.load_audio(ctx);
         }
         self.update_length();
     }
 
+    fn lane_waves(&self) -> Vec<(f64, &Waveform)> {
+        let (opponent, player) = match self.settings.waveform {
+            1 => (self.inst_wave.as_ref(), self.inst_wave.as_ref()),
+            2 if self.split_vocals() => (self.opponent_wave.as_ref(), self.player_wave.as_ref()),
+            2 => (self.voices_wave.as_ref(), self.voices_wave.as_ref()),
+            _ => (None, None),
+        };
+        [(OPPONENT_X, opponent), (PLAYER_X, player)].into_iter().filter_map(|(x, wave)| wave.map(|wave| (x, wave))).collect()
+    }
+
     fn apply_audio_settings(&mut self) {
         self.inst.set_volume(self.settings.inst_volume);
-        self.voices.set_volume(if self.chart.voices { self.settings.voices_volume } else { 0.0 });
         self.inst.set_rate(self.settings.rate);
-        self.voices.set_rate(self.settings.rate);
+        let split = self.split_vocals();
+        for (index, voice) in self.voices.iter_mut().enumerate() {
+            let level = match (split, index) {
+                (true, 0) => self.settings.player_volume,
+                (true, _) => self.settings.opponent_volume,
+                _ => self.settings.voices_volume,
+            };
+            voice.set_volume(if self.chart.voices { level } else { 0.0 });
+            voice.set_rate(self.settings.rate);
+        }
     }
 
     fn update_length(&mut self) {
-        let audio = self.inst.length().max(self.voices.length());
+        let audio = self.voices.iter().map(Sound::length).fold(self.inst.length(), f64::max);
         let last = self.notes().iter().map(|n| n.time + n.length).fold(0.0, f64::max);
         let fallback = time_at(self.timing(), step_at(self.timing(), last) + 64.0);
         self.length = if audio > 0.0 { audio } else { fallback.max(time_at(self.timing(), 16.0 * 32.0)) };
@@ -500,7 +551,9 @@ impl Editor {
         self.last_tick = self.time;
         if self.playing {
             self.inst.set_time(&mut ctx.audio, self.time);
-            self.voices.set_time(&mut ctx.audio, self.time);
+            for voice in self.voices.iter_mut() {
+                voice.set_time(&mut ctx.audio, self.time);
+            }
         }
     }
 
@@ -520,13 +573,17 @@ impl Editor {
         self.last_tick = self.time;
         self.apply_audio_settings();
         self.inst.play(&mut ctx.audio, true, self.time);
-        self.voices.play(&mut ctx.audio, true, self.time);
+        for voice in self.voices.iter_mut() {
+            voice.play(&mut ctx.audio, true, self.time);
+        }
     }
 
     fn stop(&mut self) {
         self.playing = false;
         self.inst.pause();
-        self.voices.pause();
+        for voice in self.voices.iter_mut() {
+            voice.pause();
+        }
     }
 
     fn set_template_kind(&mut self, kind: usize) {
@@ -845,14 +902,18 @@ impl Editor {
             *f = (*f - elapsed).max(0.0);
         }
         self.inst.update(elapsed);
-        self.voices.update(elapsed);
+        for voice in self.voices.iter_mut() {
+            voice.update(elapsed);
+        }
         if !self.playing {
             return;
         }
         if self.inst.playing() {
             self.time = self.inst.time();
-            if self.voices.playing() && (self.voices.time() - self.time).abs() > 30.0 {
-                self.voices.set_time(&mut ctx.audio, self.time);
+            for voice in self.voices.iter_mut() {
+                if voice.playing() && (voice.time() - self.time).abs() > 30.0 {
+                    voice.set_time(&mut ctx.audio, self.time);
+                }
             }
         } else {
             self.time += elapsed * 1000.0 * self.settings.rate;
@@ -1278,25 +1339,19 @@ impl Editor {
             let x = if focus == Side::Player { PLAYER_X } else { OPPONENT_X };
             self.ui.fill(Rect::new(x, y0, GRID * 4.0, y1 - y0), 0x1A7C5CFF);
         }
-        let wave = match self.settings.waveform {
-            1 => self.inst_wave.as_ref(),
-            2 => self.voices_wave.as_ref(),
-            _ => None,
-        };
-        if let Some(wave) = wave {
-            let mut y = start_y;
-            let mut rows = Vec::new();
-            while y < end_y {
-                let peak = wave.peak(self.time_of(y), self.time_of(y + 2.0)) as f64;
-                rows.push((y, peak));
-                y += 2.0;
+        let lanes = self.lane_waves();
+        let mut rows = Vec::new();
+        let mut y = start_y;
+        while y < end_y {
+            let (from, to) = (self.time_of(y), self.time_of(y + 2.0));
+            for &(base, wave) in &lanes {
+                rows.push((base, y, wave.peak(from, to) as f64));
             }
-            for (y, peak) in rows {
-                let half = peak * GRID * 2.0;
-                for base in [OPPONENT_X, PLAYER_X] {
-                    self.ui.fill(Rect::new(base + GRID * 2.0 - half, y, half * 2.0, 2.0), 0x553D6BFF);
-                }
-            }
+            y += 2.0;
+        }
+        for (base, y, peak) in rows {
+            let half = peak * GRID * 2.0;
+            self.ui.fill(Rect::new(base + GRID * 2.0 - half, y, half * 2.0, 2.0), 0x553D6BFF);
         }
         if pps >= 6.0 {
             for step in top_step.max(0)..=bottom_step {

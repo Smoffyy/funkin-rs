@@ -18,7 +18,7 @@ jobs:
             target: windows
           - os: macos-latest
             target: macos
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             target: linux
     runs-on: ${{ matrix.os }}
     steps:
@@ -37,6 +37,13 @@ jobs:
       - name: Build
         run: cargo build --release
 
+      - name: Build macOS Intel and combine
+        if: runner.os == 'macOS'
+        run: |
+          rustup target add x86_64-apple-darwin
+          cargo build --release --target x86_64-apple-darwin
+          lipo -create -output funkin-rs-universal target/release/funkin-rs target/x86_64-apple-darwin/release/funkin-rs
+
       - name: Package Windows
         if: runner.os == 'Windows'
         shell: pwsh
@@ -48,10 +55,29 @@ jobs:
       - name: Package macOS
         if: runner.os == 'macOS'
         run: |
-          mkdir -p dist/funkin-rs
-          cp target/release/funkin-rs dist/funkin-rs/
-          cp -R assets content dist/funkin-rs/
-          (cd dist && zip -r ../funkin-rs-macos.zip funkin-rs)
+          app=dist/funkin-rs.app/Contents/MacOS
+          mkdir -p $app
+          cp funkin-rs-universal $app/funkin-rs
+          cp -R assets content $app/
+          cat > dist/funkin-rs.app/Contents/Info.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key>
+            <string>Friday Night Funkin'</string>
+            <key>CFBundleExecutable</key>
+            <string>funkin-rs</string>
+            <key>CFBundleIdentifier</key>
+            <string>dev.funkin-rs.app</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>NSHighResolutionCapable</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+          (cd dist && zip -r ../funkin-rs-macos.zip funkin-rs.app)
 
       - name: Package Linux
         if: runner.os == 'Linux'
@@ -89,9 +115,9 @@ jobs:
 
           ---
 
-          Windows: unzip and run funkin-rs.exe.
+          Windows: unzip and run funkin-rs.exe. If Windows SmartScreen blocks it, choose More info, then Run anyway. The build is not signed.
 
-          macOS: unzip and right-click funkin-rs, then choose Open the first time. The build is not signed.
+          macOS: unzip and open funkin-rs.app. The build is not signed, so if macOS blocks it, open System Settings > Privacy & Security and click Open Anyway. Works on Intel and Apple Silicon Macs.
 
           Linux: extract the archive and run ./funkin-rs.
           EOF
