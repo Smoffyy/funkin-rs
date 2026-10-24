@@ -1,0 +1,25 @@
+funkin-rs
+Copyright 2026 Smoffyy
+
+This project is a Rust port of Friday Night Funkin'.
+
+Game logic is ported from the Friday Night Funkin' legacy 0.2.8 source code,
+and the art, music, sounds and charts in the assets folder come from the
+Friday Night Funkin' 0.2.7.1 repository. Both are licensed under the Apache
+License, Version 2.0.
+
+Friday Night Funkin' is made by:
+  ninjamuffin99 (programming)
+  PhantomArcade (animation and art)
+  evilsk8r (art)
+  kawaisprite (music)
+  Moawling (week 6 pixel art)
+  BassetFilms (music for Monster)
+
+Pico is created by Tom Fulp. Skid and Pump are created by SrPelo.
+
+Engine behavior is modeled on HaxeFlixel and flixel-addons (MIT License).
+
+The bundled font VT323 (The VT323 Project Authors) is licensed under the SIL
+Open Font License 1.1. It stands in for the fonts used by the original game,
+which are not included.
