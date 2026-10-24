@@ -12,9 +12,6 @@ A Rust remake of Friday Night Funkin'. The goal is a 1:1 recreation of how the g
 
 ## Rules
 
-- Never write code comments of any kind: no inline or block comments, doc comments, TODOs or commented-out code.
-- Never use em dashes in code, docs or messages.
-- Every file must end right after its last visible character, with no trailing newline.
 - Do not use Python. Use native OS tools and the Rust toolchain.
 - Write plain, idiomatic Rust that matches the surrounding code. Avoid clever abstractions, nested ternaries and defensive boilerplate for unlikely cases.
 - Keep the build free of warnings. Delete code that becomes unused instead of silencing it.

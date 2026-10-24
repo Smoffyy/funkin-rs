@@ -359,6 +359,7 @@ impl PlayState {
         evil.update_hitbox();
         evil.screen_center(Axes::XY);
         evil.x += evil.width / 5.0;
+        evil.set_alpha(0.0);
         self.senpai_evil = Some(evil);
         let (x, y) = (self.cam_pos.x, self.cam_pos.y);
         self.set_cam_follow(ctx, x, y);
@@ -418,9 +419,6 @@ impl PlayState {
                     if self.dialogue.as_ref().map(|d| d.has_dialog).unwrap_or(false) {
                         self.in_cutscene = true;
                         if self.song.id == "thorns" {
-                            if let Some(evil) = self.senpai_evil.as_mut() {
-                                evil.set_alpha(0.0);
-                            }
                             self.cut_timer.start(0.3, 1);
                             self.cutscene = Cutscene::SenpaiRise;
                         } else {
