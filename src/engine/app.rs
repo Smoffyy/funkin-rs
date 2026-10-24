@@ -91,6 +91,8 @@ impl Ctx {
     }
 }
 
+const QUICK_TRANSITION_SCALE: f64 = 0.4;
+
 struct Transition {
     sprite: Sprite,
     going_out: bool,
@@ -133,8 +135,9 @@ impl Transition {
         } else {
             (-back_height / 2.0, GAME_HEIGHT)
         };
+        let duration = if ctx.data.prefs.quick_transitions { data.duration * QUICK_TRANSITION_SCALE } else { data.duration };
         sprite.y = start;
-        sprite.tween(Prop::Y, Tween::new(end, data.duration));
+        sprite.tween(Prop::Y, Tween::new(end, duration));
         Transition { sprite, going_out, delay_frame: false }
     }
 

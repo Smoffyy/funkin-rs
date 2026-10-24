@@ -1379,6 +1379,9 @@ impl PlayState {
     }
 
     fn update_main(&mut self, ctx: &mut Ctx) {
+        if ctx.is_exiting() {
+            return;
+        }
         if let Some(t) = self.cam_zoom_tween.as_mut() {
             let current = ctx.cameras[CAM_GAME].zoom;
             if let Some(v) = t.step(ctx.elapsed, current) {

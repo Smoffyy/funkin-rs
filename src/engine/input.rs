@@ -75,15 +75,20 @@ impl Keys {
             }
         }
         let mut pressed_now: Vec<KeyCode> = Vec::new();
-        for (key, down) in std::mem::take(&mut self.pending) {
+        let mut events = std::mem::take(&mut self.pending).into_iter();
+        let mut deferred = Vec::new();
+        while let Some((key, down)) = events.next() {
             let input = self.inputs.entry(key).or_insert(Input { current: State::Released, last: State::Released, release_queued: false });
+            if down && input.release_queued {
+                deferred.push((key, down));
+                break;
+            }
             if down {
                 if input.pressed() {
                     continue;
                 }
                 input.last = input.current;
                 input.current = State::JustPressed;
-                input.release_queued = false;
                 pressed_now.push(key);
             } else if pressed_now.contains(&key) {
                 input.release_queued = true;
@@ -92,6 +97,8 @@ impl Keys {
                 input.current = State::JustReleased;
             }
         }
+        deferred.extend(events);
+        self.pending = deferred;
         for input in self.inputs.values_mut() {
             if input.last == State::JustReleased && input.current == State::JustReleased {
                 input.current = State::Released;
