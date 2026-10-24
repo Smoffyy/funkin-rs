@@ -482,7 +482,8 @@ impl PlayState {
         let song = self.song.clone();
         ctx.data.conductor.change_bpm(song.bpm());
         if song.needs_voices {
-            let data = library::voices(ctx, &song.id, &song.name, song.voices.as_deref());
+            let data = library::mixed_voices(ctx, &song.id, song.player_voices.as_deref(), song.opponent_voices.as_deref())
+                .or_else(|| library::voices(ctx, &song.id, &song.name, song.voices.as_deref()));
             self.vocals = Sound::new(data, 1.0, false);
         }
         let speed = song.speed;

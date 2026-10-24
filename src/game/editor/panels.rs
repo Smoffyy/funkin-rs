@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use serde_json::Value;
 
 use crate::engine::app::Ctx;
@@ -216,7 +218,7 @@ impl Editor {
         }
         let folder = library::chart_folder(ctx, &super::super::song::song_id(&self.chart.name));
         let inst = if self.inst.length() > 0.0 { "loaded" } else { "missing" };
-        let vocals = if self.voices.length() > 0.0 { "loaded" } else { "missing" };
+        let vocals = if self.split_vocals() { "separated" } else if self.voices.iter().any(|v| v.length() > 0.0) { "loaded" } else { "missing" };
         self.ui.text(&format!("Inst: {inst}    Vocals: {vocals}"), X, y, 16.0, TEXT_DIM);
         y += 20.0;
         self.ui.text(&format!("Custom audio: {}", folder.join("Inst.ogg / Voices.ogg").display()), X, y, 14.0, TEXT_DIM);
@@ -230,7 +232,38 @@ impl Editor {
             let program = if cfg!(windows) { "explorer" } else if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
             let _ = std::process::Command::new(program).arg(&folder).spawn();
         }
-        y += ROW + 6.0;
+        y += ROW;
+        let mut separate = self.chart.player_voices.is_some() || self.chart.opponent_voices.is_some();
+        if self.ui.checkbox("songseparate", row(y), "Separate vocals", &mut separate) {
+            self.checkpoint();
+            if separate {
+                self.chart.voices = true;
+                self.chart.player_voices = Some("Voices-player.ogg".to_string());
+                self.chart.opponent_voices = Some("Voices-opponent.ogg".to_string());
+            } else {
+                self.chart.player_voices = None;
+                self.chart.opponent_voices = None;
+            }
+            self.load_audio(ctx);
+        }
+        y += ROW;
+        if separate {
+            let player = self.chart.player_voices.clone();
+            if let Some(value) = self.file_field("songplayer", "Player file", player, &folder, y) {
+                self.checkpoint();
+                self.chart.player_voices = value;
+                self.load_audio(ctx);
+            }
+            y += ROW;
+            let opponent = self.chart.opponent_voices.clone();
+            if let Some(value) = self.file_field("songopponent", "Opponent file", opponent, &folder, y) {
+                self.checkpoint();
+                self.chart.opponent_voices = value;
+                self.load_audio(ctx);
+            }
+            y += ROW;
+        }
+        y += 6.0;
         self.ui.label("Open song", row(y));
         let songs = self.songs.clone();
         let mut open = self.open_index.min(songs.len().saturating_sub(1));
@@ -261,6 +294,17 @@ impl Editor {
                 None => self.say("No autosave found for this song"),
             }
         }
+    }
+
+    fn file_field(&mut self, key: &str, label: &str, file: Option<String>, folder: &Path, y: f64) -> Option<Option<String>> {
+        self.ui.label(label, row(y));
+        let mut value = file.clone().unwrap_or_default();
+        let found = file.map(|f| folder.join(f).exists()).unwrap_or(false);
+        let input = Rect::new(X + LABEL, y, W - LABEL - 80.0, ROW - 4.0);
+        let changed = self.ui.text_field(key, input, &mut value);
+        let status = if found { "found" } else { "missing" };
+        self.ui.text(status, X + W - 70.0, y + 3.0, 18.0, if found { TEXT } else { 0xFFFF7A7A });
+        changed.then(|| if value.trim().is_empty() { None } else { Some(value.trim().to_string()) })
     }
 
     fn open_chart(&mut self, ctx: &mut Ctx, chart: ChartFile) {
@@ -310,29 +354,51 @@ impl Editor {
             } else {
                 d.inst = None;
                 d.voices = None;
+                d.player_voices = None;
+                d.opponent_voices = None;
             }
             self.load_audio(ctx);
         }
         y += ROW;
         let folder = library::chart_folder(ctx, &self.chart.id);
         if own_audio {
-            for (key, label, file) in [("instfile", "Inst file", current.inst.clone()), ("voicefile", "Vocals file", current.voices.clone())] {
-                self.ui.label(label, row(y));
-                let mut value = file.clone().unwrap_or_default();
-                let found = file.map(|f| folder.join(f).exists()).unwrap_or(false);
-                let input = Rect::new(X + LABEL, y, W - LABEL - 80.0, ROW - 4.0);
-                if self.ui.text_field(key, input, &mut value) {
+            let mut separate = current.player_voices.is_some() || current.opponent_voices.is_some();
+            if self.ui.checkbox("separatevocals", row(y), "Separate vocals", &mut separate) {
+                self.checkpoint();
+                if separate {
+                    self.chart.voices = true;
+                }
+                let tag = self.current().name.clone();
+                let d = self.current_mut();
+                if separate {
+                    d.player_voices = Some(format!("Voices-player-{tag}.ogg"));
+                    d.opponent_voices = Some(format!("Voices-opponent-{tag}.ogg"));
+                } else {
+                    d.player_voices = None;
+                    d.opponent_voices = None;
+                }
+                self.load_audio(ctx);
+            }
+            y += ROW;
+            let mut fields = vec![("instfile", "Inst file", current.inst.clone())];
+            if separate {
+                fields.push(("playerfile", "Player file", current.player_voices.clone()));
+                fields.push(("opponentfile", "Opponent file", current.opponent_voices.clone()));
+            } else {
+                fields.push(("voicefile", "Vocals file", current.voices.clone()));
+            }
+            for (key, label, file) in fields {
+                if let Some(value) = self.file_field(key, label, file, &folder, y) {
                     self.checkpoint();
-                    let value = if value.trim().is_empty() { None } else { Some(value.trim().to_string()) };
-                    if key == "instfile" {
-                        self.current_mut().inst = value;
-                    } else {
-                        self.current_mut().voices = value;
+                    let d = self.current_mut();
+                    match key {
+                        "instfile" => d.inst = value,
+                        "playerfile" => d.player_voices = value,
+                        "opponentfile" => d.opponent_voices = value,
+                        _ => d.voices = value,
                     }
                     self.load_audio(ctx);
                 }
-                let status = if found { "found" } else { "missing" };
-                self.ui.text(status, X + W - 70.0, y + 3.0, 18.0, if found { TEXT } else { 0xFFFF7A7A });
                 y += ROW;
             }
             self.ui.text(&format!("Put the files in {}", folder.display()), X, y, 14.0, TEXT_DIM);
@@ -701,9 +767,18 @@ impl Editor {
         self.ui.label("Inst volume", row(y));
         self.ui.stepper("instvol", field(y), &mut settings.inst_volume, 0.05, 0.0, 1.0, 2);
         y += ROW;
-        self.ui.label("Vocals volume", row(y));
-        self.ui.stepper("voicevol", field(y), &mut settings.voices_volume, 0.05, 0.0, 1.0, 2);
-        y += ROW;
+        if self.split_vocals() {
+            self.ui.label("Opponent volume", row(y));
+            self.ui.stepper("oppvol", field(y), &mut settings.opponent_volume, 0.05, 0.0, 1.0, 2);
+            y += ROW;
+            self.ui.label("Player volume", row(y));
+            self.ui.stepper("playervol", field(y), &mut settings.player_volume, 0.05, 0.0, 1.0, 2);
+            y += ROW;
+        } else {
+            self.ui.label("Vocals volume", row(y));
+            self.ui.stepper("voicevol", field(y), &mut settings.voices_volume, 0.05, 0.0, 1.0, 2);
+            y += ROW;
+        }
         self.ui.label("Waveform", row(y));
         let waves = options(&["Off", "Instrumental", "Vocals"]);
         self.ui.dropdown("wave", field(y), &waves, &mut settings.waveform);

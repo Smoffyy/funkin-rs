@@ -75,6 +75,8 @@ pub struct Difficulty {
     pub notes: Vec<ChartNote>,
     pub inst: Option<String>,
     pub voices: Option<String>,
+    pub player_voices: Option<String>,
+    pub opponent_voices: Option<String>,
     pub timing: Option<Vec<TimingPoint>>,
     pub events: Option<Vec<ChartEvent>>,
     pub drain: Option<Drain>,
@@ -82,7 +84,7 @@ pub struct Difficulty {
 
 impl Difficulty {
     pub fn new(name: &str, speed: f64) -> Difficulty {
-        Difficulty { name: difficulty_id(name), speed, notes: Vec::new(), inst: None, voices: None, timing: None, events: None, drain: None }
+        Difficulty { name: difficulty_id(name), speed, notes: Vec::new(), inst: None, voices: None, player_voices: None, opponent_voices: None, timing: None, events: None, drain: None }
     }
 }
 
@@ -101,6 +103,8 @@ pub struct ChartFile {
     pub opponent: String,
     pub girlfriend: Option<String>,
     pub voices: bool,
+    pub player_voices: Option<String>,
+    pub opponent_voices: Option<String>,
     pub offset: f64,
     pub timing: Vec<TimingPoint>,
     pub events: Vec<ChartEvent>,
@@ -125,6 +129,8 @@ pub struct Song {
     pub events: Vec<ChartEvent>,
     pub inst: Option<String>,
     pub voices: Option<String>,
+    pub player_voices: Option<String>,
+    pub opponent_voices: Option<String>,
     pub valid_score: bool,
     pub drain: Option<Drain>,
 }
@@ -278,6 +284,8 @@ fn parse_difficulty(name: &str, d: &Value) -> Difficulty {
     if let Some(audio) = d.get("audio") {
         difficulty.inst = text(audio, "inst");
         difficulty.voices = text(audio, "voices");
+        difficulty.player_voices = text(audio, "player_voices");
+        difficulty.opponent_voices = text(audio, "opponent_voices");
     }
     difficulty.timing = parse_timing(d.get("timing"));
     difficulty.events = parse_events(d.get("events"));
@@ -311,14 +319,11 @@ fn write_events(events: &[ChartEvent], indent: &str) -> String {
 
 fn write_difficulty(d: &Difficulty) -> String {
     let mut fields = vec![format!("\t\t\t\"name\": {}", quote(&d.name)), format!("\t\t\t\"speed\": {}", number(d.speed))];
-    if d.inst.is_some() || d.voices.is_some() {
-        let mut audio = Vec::new();
-        if let Some(inst) = &d.inst {
-            audio.push(format!("\"inst\": {}", quote(inst)));
-        }
-        if let Some(voices) = &d.voices {
-            audio.push(format!("\"voices\": {}", quote(voices)));
-        }
+    let audio: Vec<String> = [("inst", &d.inst), ("voices", &d.voices), ("player_voices", &d.player_voices), ("opponent_voices", &d.opponent_voices)]
+        .into_iter()
+        .filter_map(|(key, file)| file.as_ref().map(|file| format!("\"{key}\": {}", quote(file))))
+        .collect();
+    if !audio.is_empty() {
         fields.push(format!("\t\t\t\"audio\": {{{}}}", audio.join(", ")));
     }
     if let Some(drain) = &d.drain {
@@ -356,6 +361,8 @@ impl ChartFile {
             opponent: "dad".to_string(),
             girlfriend: None,
             voices: true,
+            player_voices: None,
+            opponent_voices: None,
             offset: 0.0,
             timing: vec![TimingPoint { time: 0.0, bpm: 150.0 }],
             events: vec![],
@@ -383,6 +390,12 @@ impl ChartFile {
         notes.sort_by(|a, b| a.time.total_cmp(&b.time));
         let mut events = chart.events.clone().unwrap_or_else(|| self.events.clone());
         events.sort_by(|a, b| a.time.total_cmp(&b.time));
+        let own_music = chart.inst.is_some() || chart.voices.is_some();
+        let (player_voices, opponent_voices) = if own_music {
+            (chart.player_voices.clone(), chart.opponent_voices.clone())
+        } else {
+            (self.player_voices.clone(), self.opponent_voices.clone())
+        };
         Some(Song {
             id: self.id.clone(),
             name: self.name.clone(),
@@ -399,6 +412,8 @@ impl ChartFile {
             events,
             inst: chart.inst.clone(),
             voices: chart.voices.clone(),
+            player_voices,
+            opponent_voices,
             valid_score: self.valid_score,
             drain: chart.drain,
         })
@@ -419,6 +434,8 @@ impl ChartFile {
         chart.opponent = text(&meta, "opponent").unwrap_or_else(|| "dad".to_string());
         chart.girlfriend = text(&meta, "girlfriend");
         chart.voices = meta.get("voices").map(|v| truthy(Some(v))).unwrap_or(true);
+        chart.player_voices = text(&meta, "player_voices");
+        chart.opponent_voices = text(&meta, "opponent_voices");
         chart.offset = meta.get("offset").map(num).unwrap_or(0.0);
         if let Some(timing) = parse_timing(root.get("timing")) {
             chart.timing = timing;
@@ -471,6 +488,12 @@ impl ChartFile {
             meta.push(format!("\"girlfriend\": {}", quote(gf)));
         }
         meta.push(format!("\"voices\": {}", self.voices));
+        if let Some(file) = &self.player_voices {
+            meta.push(format!("\"player_voices\": {}", quote(file)));
+        }
+        if let Some(file) = &self.opponent_voices {
+            meta.push(format!("\"opponent_voices\": {}", quote(file)));
+        }
         meta.push(format!("\"offset\": {}", number(self.offset)));
         out.push_str(&meta.iter().map(|m| format!("\t\t{m}")).collect::<Vec<_>>().join(",\n"));
         out.push_str("\n\t},\n");

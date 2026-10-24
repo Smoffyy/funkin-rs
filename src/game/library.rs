@@ -1,8 +1,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use kira::sound::static_sound::StaticSoundData;
+use kira::Frame;
 
 use crate::engine::app::Ctx;
 use crate::engine::assets::read_text_in;
@@ -96,6 +98,31 @@ pub fn inst(ctx: &mut Ctx, id: &str, name: &str, file: Option<&str>) -> Option<S
 
 pub fn voices(ctx: &mut Ctx, id: &str, name: &str, file: Option<&str>) -> Option<StaticSoundData> {
     song_audio(ctx, id, name, "Voices", file)
+}
+
+pub fn split_voices(ctx: &mut Ctx, id: &str, file: Option<&str>) -> Option<StaticSoundData> {
+    let path = chart_folder(ctx, id).join(file?);
+    ctx.audio.load(&path)
+}
+
+pub fn mixed_voices(ctx: &mut Ctx, id: &str, player: Option<&str>, opponent: Option<&str>) -> Option<StaticSoundData> {
+    let folder = chart_folder(ctx, id);
+    let mut tracks = [player, opponent].into_iter().flatten().filter_map(|file| ctx.audio.load(&folder.join(file)));
+    let first = tracks.next()?;
+    Some(tracks.fold(first, |mix, track| add_tracks(mix, &track)))
+}
+
+fn add_tracks(mix: StaticSoundData, track: &StaticSoundData) -> StaticSoundData {
+    let silent = Frame { left: 0.0, right: 0.0 };
+    let len = mix.frames.len().max(track.frames.len());
+    let frames: Arc<[Frame]> = (0..len)
+        .map(|i| {
+            let a = mix.frames.get(i).copied().unwrap_or(silent);
+            let b = track.frames.get(i).copied().unwrap_or(silent);
+            Frame { left: a.left + b.left, right: a.right + b.right }
+        })
+        .collect();
+    StaticSoundData { frames, slice: None, ..mix }
 }
 
 pub fn sound(ctx: &mut Ctx, name: &str) -> Option<StaticSoundData> {

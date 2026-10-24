@@ -61,7 +61,7 @@ Open it from **Options > Chart Editor** to start a new chart, press **7** on a s
 
 ## Charts
 
-Charts are saved to a `charts` folder, one folder per song, next to `assets`. A chart folder holds `chart.json` and, for new songs, `Inst.ogg` and `Voices.ogg`. Charts in this folder override the official charts, and new songs show up in freeplay automatically. The official 0.2.7.1 charts are read directly from `assets` and converted on load, so they are never modified.
+Charts are saved to a `charts` folder, one folder per song, next to `assets`. A chart folder holds `chart.json` and, for new songs, `Inst.ogg` and `Voices.ogg`. With Separate vocals turned on in the editor, the song's player and opponent vocals are named in `chart.json` by `player_voices` and `opponent_voices`, usually `Voices-player.ogg` and `Voices-opponent.ogg`. Charts in this folder override the official charts, and new songs show up in freeplay automatically. The official 0.2.7.1 charts are read directly from `assets` and converted on load, so they are never modified.
 
 `chart.json` is a readable JSON file:
 
@@ -113,7 +113,7 @@ Times and lengths are in milliseconds. `stage` and `girlfriend` are optional and
 
 `difficulties` is a list, so a song can have any number of them with any names. `easy`, `normal` and `hard` are what the official songs and story mode use, and anything else (like `nightmare`) is a custom difficulty that appears in freeplay and the pause menu. Each difficulty has its own scroll speed and notes, and can optionally have:
 
-- `audio`: its own `inst` and `voices` files in the chart folder, so a difficulty can play a different song underneath. Without it the difficulty uses the song's music.
+- `audio`: its own `inst` and `voices` files in the chart folder, so a difficulty can play a different song underneath. Without it the difficulty uses the song's music. Optional `player_voices` and `opponent_voices` files hold separate vocals for that difficulty.
 - `timing` and `events`: its own BPM changes and events, for music with a different tempo. Without them it uses the song-level ones.
 
 Events are a time, a name and any parameters. The built-in ones are:
