@@ -219,7 +219,7 @@ struct FpsCounter {
     times: Vec<f64>,
     cache_count: usize,
     current: usize,
-    text: Option<Text>,
+    text: Text,
 }
 
 impl FpsCounter {
@@ -232,16 +232,10 @@ impl FpsCounter {
     }
 
     fn draw(&mut self, ctx: &mut Ctx, dl: &mut DrawList, slot: usize) {
-        if self.text.is_none() {
-            let font = ctx.assets.fallback_font();
-            self.text = Some(Text::new(10.0, 3.0, 0.0, "FPS: ", 12.0, font));
-        }
         let label = format!("FPS: {}", self.current);
-        if let Some(t) = self.text.as_mut() {
-            t.set_text(&label);
-            t.sprite.scroll.set(0.0, 0.0);
-            t.draw(&mut ctx.gfx, dl, slot);
-        }
+        self.text.set_text(&label);
+        self.text.sprite.scroll.set(0.0, 0.0);
+        self.text.draw(&mut ctx.gfx, dl, slot);
     }
 }
 
@@ -311,10 +305,12 @@ pub struct App {
 
 impl App {
     pub fn new(assets: Assets, data: impl FnOnce(&mut Assets) -> GameData, first: Factory) -> App {
-        let gfx = Gfx::new();
-        let audio = Audio::new();
+        let mut gfx = Gfx::new();
+        let mut audio = Audio::new();
         let mut assets = assets;
         let data = data(&mut assets);
+        let fps_font = assets.fallback_font();
+        assets.warm(&mut gfx, &mut audio);
         let save = Save::open("funkin-rs");
         let mut ctx = Ctx {
             gfx,
@@ -353,7 +349,7 @@ impl App {
             centered: false,
             last_time: miniquad::date::now(),
             tray: SoundTray { y: -60.0, timer: 0.0, visible: false, label: None },
-            fps: FpsCounter { times: Vec::new(), cache_count: 0, current: 0, text: None },
+            fps: FpsCounter { times: Vec::new(), cache_count: 0, current: 0, text: Text::new(10.0, 3.0, 0.0, "FPS: ", 12.0, fps_font) },
             fullscreen: false,
         };
         app.switch_now();
@@ -447,6 +443,7 @@ impl EventHandler for App {
             window::set_fullscreen(self.fullscreen);
         }
         self.volume_keys();
+        self.ctx.assets.pump(&mut self.ctx.gfx, &mut self.ctx.audio);
         self.ctx.audio.update(elapsed);
         self.tray.update(elapsed);
 

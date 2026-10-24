@@ -1,7 +1,8 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 
-use fontdue::Font;
+use fontdue::{Font, Metrics};
 
 use super::atlas::Frames;
 use super::gfx::{DrawList, Gfx, Texture};
@@ -9,6 +10,40 @@ use super::sprite::Sprite;
 
 thread_local! {
     static GARBAGE: RefCell<Vec<Texture>> = const { RefCell::new(Vec::new()) };
+}
+
+struct Glyph {
+    metrics: Metrics,
+    coverage: Vec<u8>,
+}
+
+thread_local! {
+    static GLYPHS: RefCell<HashMap<(usize, char, u32), Rc<Glyph>>> = RefCell::new(HashMap::new());
+    static GLYPH_CACHE: Cell<bool> = const { Cell::new(false) };
+}
+
+pub fn enable_glyph_cache() {
+    GLYPH_CACHE.with(|c| c.set(true));
+}
+
+fn glyph_caching() -> bool {
+    GLYPH_CACHE.with(|c| c.get())
+}
+
+fn cached_glyph(font: &Rc<Font>, ch: char, px: f32) -> Rc<Glyph> {
+    let caching = glyph_caching();
+    let key = (Rc::as_ptr(font) as usize, ch, px.to_bits());
+    if caching {
+        if let Some(glyph) = GLYPHS.with(|g| g.borrow().get(&key).cloned()) {
+            return glyph;
+        }
+    }
+    let (metrics, coverage) = font.rasterize(ch, px);
+    let glyph = Rc::new(Glyph { metrics, coverage });
+    if caching {
+        GLYPHS.with(|g| g.borrow_mut().insert(key, glyph.clone()));
+    }
+    glyph
 }
 
 pub fn collect_garbage(gfx: &mut Gfx) {
@@ -137,6 +172,16 @@ impl Text {
         self.size as f32
     }
 
+    fn advance(&self, ch: char) -> f64 {
+        let px = self.px();
+        let advance = if glyph_caching() {
+            cached_glyph(&self.font, ch, px).metrics.advance_width
+        } else {
+            self.font.metrics(ch, px).advance_width
+        };
+        advance as f64
+    }
+
     fn line_height(&self) -> f64 {
         match self.font.horizontal_line_metrics(self.px()) {
             Some(m) => (m.ascent - m.descent + m.line_gap) as f64,
@@ -159,18 +204,18 @@ impl Text {
             let mut prev: Option<char> = None;
             for ch in raw.chars() {
                 let kern = prev.and_then(|p| self.font.horizontal_kern(p, ch, px)).unwrap_or(0.0) as f64;
-                let advance = self.font.metrics(ch, px).advance_width as f64;
+                let advance = self.advance(ch);
                 let pen = line.width + kern;
                 if let Some(limit) = wrap {
                     if pen + advance > limit && !line.glyphs.is_empty() && ch != ' ' {
                         if let Some(space) = last_space {
                             let rest: Vec<(char, f64)> = line.glyphs.split_off(space + 1);
                             line.glyphs.pop();
-                            line.width = line.glyphs.last().map(|(c, x)| x + self.font.metrics(*c, px).advance_width as f64).unwrap_or(0.0);
+                            line.width = line.glyphs.last().map(|(c, x)| x + self.advance(*c)).unwrap_or(0.0);
                             lines.push(line);
                             let shift = rest.first().map(|(_, x)| *x).unwrap_or(0.0);
                             let mut next = Line { glyphs: rest.into_iter().map(|(c, x)| (c, x - shift)).collect(), width: 0.0 };
-                            next.width = next.glyphs.last().map(|(c, x)| x + self.font.metrics(*c, px).advance_width as f64).unwrap_or(0.0);
+                            next.width = next.glyphs.last().map(|(c, x)| x + self.advance(*c)).unwrap_or(0.0);
                             line = next;
                             last_space = None;
                         } else {
@@ -228,7 +273,9 @@ impl Text {
                 if ch.is_whitespace() {
                     continue;
                 }
-                let (m, coverage) = self.font.rasterize(ch, px);
+                let glyph = cached_glyph(&self.font, ch, px);
+                let m = &glyph.metrics;
+                let coverage = &glyph.coverage;
                 let gx = (start + pen).round() as i32 + m.xmin;
                 let gy = baseline - m.ymin - m.height as i32;
                 for yy in 0..m.height {

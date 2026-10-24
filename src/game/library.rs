@@ -1,10 +1,11 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use kira::sound::static_sound::StaticSoundData;
 
 use crate::engine::app::Ctx;
+use crate::engine::assets::read_text_in;
 
 use super::song::{song_id, ChartFile, Song};
 
@@ -20,40 +21,55 @@ fn legacy_file(id: &str, difficulty: usize) -> String {
     }
 }
 
-pub fn chart_file(ctx: &mut Ctx, song: &str) -> Option<ChartFile> {
-    let id = song_id(song);
-    let path = chart_folder(ctx, &id).join("chart.json");
-    if let Some(chart) = fs::read_to_string(&path).ok().and_then(|text| ChartFile::parse(&id, &text)) {
+pub fn load_chart(roots: &[PathBuf], folder: &Path, id: &str) -> Option<ChartFile> {
+    if let Some(chart) = fs::read_to_string(folder.join("chart.json")).ok().and_then(|text| ChartFile::parse(id, &text)) {
         return Some(chart);
     }
-    let files = [0, 1, 2].map(|d| ctx.assets.read_text(&format!("data/{id}/{}.json", legacy_file(&id, d))));
-    ChartFile::from_legacy(&id, files)
+    let files = [0, 1, 2].map(|d| read_text_in(roots, &format!("data/{id}/{}.json", legacy_file(id, d))));
+    ChartFile::from_legacy(id, files)
 }
 
-pub fn save_chart(ctx: &Ctx, chart: &ChartFile) -> std::io::Result<PathBuf> {
-    let folder = chart_folder(ctx, &chart.id);
+pub fn chart_file(ctx: &mut Ctx, song: &str) -> Option<Rc<ChartFile>> {
+    let id = song_id(song);
+    if let Some(chart) = ctx.assets.cached_chart(&id) {
+        return Some(chart);
+    }
+    let chart = Rc::new(load_chart(&ctx.assets.roots, &chart_folder(ctx, &id), &id)?);
+    ctx.assets.store_chart(id, chart.clone());
+    Some(chart)
+}
+
+pub fn save_chart(ctx: &mut Ctx, chart: &ChartFile) -> std::io::Result<PathBuf> {
+    let id = song_id(&chart.id);
+    let folder = chart_folder(ctx, &id);
     fs::create_dir_all(&folder)?;
     let path = folder.join("chart.json");
     fs::write(&path, chart.write())?;
+    ctx.assets.songs.retain(|(song, _), _| *song != id);
+    ctx.assets.store_chart(id, Rc::new(chart.clone()));
     Ok(path)
 }
 
-pub fn custom_songs(ctx: &Ctx) -> Vec<ChartFile> {
+pub fn custom_songs(ctx: &mut Ctx) -> Vec<Rc<ChartFile>> {
     let Ok(entries) = fs::read_dir(&ctx.data.charts_dir) else { return vec![] };
-    let mut songs: Vec<ChartFile> = entries
+    let ids: Vec<String> = entries
         .flatten()
-        .filter_map(|e| {
-            let id = e.file_name().to_string_lossy().to_string();
-            let text = fs::read_to_string(e.path().join("chart.json")).ok()?;
-            ChartFile::parse(&id, &text)
-        })
+        .filter(|e| e.path().join("chart.json").exists())
+        .map(|e| e.file_name().to_string_lossy().to_string())
         .collect();
+    let mut songs: Vec<Rc<ChartFile>> = ids.iter().filter_map(|id| chart_file(ctx, id)).collect();
     songs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     songs
 }
 
 pub fn chart(ctx: &mut Ctx, song: &str, difficulty: &str) -> Option<Rc<Song>> {
-    chart_file(ctx, song)?.song(difficulty).map(Rc::new)
+    let key = (song_id(song), difficulty.to_string());
+    if let Some(built) = ctx.assets.cached_song(&key) {
+        return Some(built);
+    }
+    let built = Rc::new(chart_file(ctx, song)?.song(difficulty)?);
+    ctx.assets.store_song(key, built.clone());
+    Some(built)
 }
 
 fn audio_file(ctx: &mut Ctx, rel: &str) -> Option<StaticSoundData> {

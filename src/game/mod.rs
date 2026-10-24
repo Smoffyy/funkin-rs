@@ -70,24 +70,29 @@ fn content_roots() -> Vec<PathBuf> {
 }
 
 pub fn boot() -> App {
-    let assets = Assets::new(content_roots());
+    let charts = charts_dir();
+    let save = crate::engine::save::Save::open("funkin-rs");
+    let prefs = Prefs::load(&save);
+    let mut assets = Assets::new(content_roots());
+    if prefs.preload_assets {
+        assets.enable_caching(&charts);
+    }
     App::new(
         assets,
         |assets| {
             let fonts = Fonts { ui: assets.font("fonts/VT323-Regular.ttf") };
-            let save = crate::engine::save::Save::open("funkin-rs");
             let mut controls = Controls::defaults();
             controls.load(&save);
             GameData {
                 fonts,
-                prefs: Prefs::load(&save),
+                prefs,
                 controls,
                 scores: Highscore::load(&save),
                 session: Session::default(),
                 conductor: Conductor::default(),
                 title_initialized: false,
                 characters: None,
-                charts_dir: charts_dir(),
+                charts_dir: charts,
             }
         },
         Box::new(|ctx: &mut Ctx| {

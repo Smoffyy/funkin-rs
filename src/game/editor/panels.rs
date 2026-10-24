@@ -240,7 +240,7 @@ impl Editor {
         if self.ui.button("openbtn", Rect::new(X + W - 80.0, y, 80.0, ROW - 4.0), "Open") {
             if let Some(id) = songs.get(open).cloned() {
                 if let Some(chart) = library::chart_file(ctx, &id) {
-                    self.open_chart(ctx, chart);
+                    self.open_chart(ctx, (*chart).clone());
                     self.say(&format!("Opened {id}"));
                 }
             }

@@ -2,29 +2,41 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::mpsc::Receiver;
+use std::time::{Duration, Instant};
 
 use fontdue::{Font, FontSettings};
 
 use super::atlas::Frames;
+use super::audio::Audio;
 use super::gfx::{Gfx, Texture};
+use super::preload::{self, DecodedImage, Job, Loaded};
+use super::text::enable_glyph_cache;
+use crate::game::song::{ChartFile, Song};
+
+const UPLOAD_BUDGET: Duration = Duration::from_millis(4);
+
+pub fn find_in(roots: &[PathBuf], rel: &str) -> Option<PathBuf> {
+    roots.iter().rev().map(|r| r.join(rel)).find(|p| p.exists())
+}
+
+pub fn read_text_in(roots: &[PathBuf], rel: &str) -> Option<String> {
+    let path = find_in(roots, rel)?;
+    fs::read_to_string(path).ok().map(|s| s.trim_start_matches('\u{feff}').to_string())
+}
 
 pub struct Assets {
     pub roots: Vec<PathBuf>,
-    textures: HashMap<String, Texture>,
+    textures: HashMap<PathBuf, Texture>,
     frames: HashMap<String, Rc<Frames>>,
     fonts: HashMap<String, Rc<Font>>,
     solids: HashMap<u32, Texture>,
     fallback_font: Option<Rc<Font>>,
-}
-
-fn premultiply(mut bytes: Vec<u8>) -> Vec<u8> {
-    for px in bytes.chunks_exact_mut(4) {
-        let a = px[3] as u32;
-        px[0] = ((px[0] as u32 * a + 127) / 255) as u8;
-        px[1] = ((px[1] as u32 * a + 127) / 255) as u8;
-        px[2] = ((px[2] as u32 * a + 127) / 255) as u8;
-    }
-    bytes
+    pub charts: HashMap<String, Rc<ChartFile>>,
+    pub songs: HashMap<(String, String), Rc<Song>>,
+    loads: Option<Receiver<Loaded>>,
+    images_pending: usize,
+    caching: bool,
 }
 
 impl Assets {
@@ -36,11 +48,84 @@ impl Assets {
             fonts: HashMap::new(),
             solids: HashMap::new(),
             fallback_font: None,
+            charts: HashMap::new(),
+            songs: HashMap::new(),
+            loads: None,
+            images_pending: 0,
+            caching: false,
         }
     }
 
+    pub fn enable_caching(&mut self, charts_dir: &Path) {
+        let jobs = preload::jobs(&self.roots, charts_dir);
+        self.images_pending = jobs.iter().filter(|job| matches!(job, Job::Image(_))).count();
+        self.caching = true;
+        enable_glyph_cache();
+        self.loads = Some(preload::start(jobs));
+    }
+
+    pub fn cached_chart(&self, id: &str) -> Option<Rc<ChartFile>> {
+        if self.caching { self.charts.get(id).cloned() } else { None }
+    }
+
+    pub fn store_chart(&mut self, id: String, chart: Rc<ChartFile>) {
+        if self.caching {
+            self.charts.insert(id, chart);
+        }
+    }
+
+    pub fn cached_song(&self, key: &(String, String)) -> Option<Rc<Song>> {
+        if self.caching { self.songs.get(key).cloned() } else { None }
+    }
+
+    pub fn store_song(&mut self, key: (String, String), song: Rc<Song>) {
+        if self.caching {
+            self.songs.insert(key, song);
+        }
+    }
+
+    pub fn warm(&mut self, gfx: &mut Gfx, audio: &mut Audio) {
+        while self.images_pending > 0 {
+            let Some(rx) = self.loads.as_ref() else { return };
+            let Ok(loaded) = rx.recv() else { return };
+            self.accept(gfx, audio, loaded);
+        }
+    }
+
+    pub fn pump(&mut self, gfx: &mut Gfx, audio: &mut Audio) {
+        let start = Instant::now();
+        while start.elapsed() < UPLOAD_BUDGET {
+            let Some(rx) = self.loads.as_ref() else { return };
+            let Ok(loaded) = rx.try_recv() else { return };
+            self.accept(gfx, audio, loaded);
+        }
+    }
+
+    fn accept(&mut self, gfx: &mut Gfx, audio: &mut Audio, loaded: Loaded) {
+        match loaded {
+            Loaded::Image(path, image) => {
+                self.images_pending -= 1;
+                if let Some(image) = image {
+                    self.upload(gfx, path, image);
+                }
+            }
+            Loaded::Sound(path, data) => audio.store(path, data),
+            Loaded::Chart(id, chart) => {
+                self.charts.entry(id).or_insert_with(|| Rc::new(chart));
+            }
+        }
+    }
+
+    fn upload(&mut self, gfx: &mut Gfx, path: PathBuf, image: DecodedImage) {
+        if self.textures.contains_key(&path) {
+            return;
+        }
+        let texture = gfx.create_texture(image.width, image.height, &image.pixels);
+        self.textures.insert(path, texture);
+    }
+
     pub fn find(&self, rel: &str) -> Option<PathBuf> {
-        self.roots.iter().rev().map(|r| r.join(rel)).find(|p| p.exists())
+        find_in(&self.roots, rel)
     }
 
     pub fn find_ignore_case(&self, rel: &str) -> Option<PathBuf> {
@@ -52,8 +137,7 @@ impl Assets {
     }
 
     pub fn read_text(&self, rel: &str) -> Option<String> {
-        let path = self.find(rel)?;
-        fs::read_to_string(path).ok().map(|s| s.trim_start_matches('\u{feff}').to_string())
+        read_text_in(&self.roots, rel)
     }
 
     pub fn list_dir(&self, rel: &str) -> Vec<String> {
@@ -73,14 +157,12 @@ impl Assets {
     }
 
     fn load_texture_file(&mut self, gfx: &mut Gfx, path: &Path) -> Option<Texture> {
-        let key = path.to_string_lossy().to_string();
-        if let Some(t) = self.textures.get(&key) {
+        if let Some(t) = self.textures.get(path) {
             return Some(*t);
         }
-        let image = image::open(path).ok()?.to_rgba8();
-        let (w, h) = image.dimensions();
-        let texture = gfx.create_texture(w, h, &premultiply(image.into_raw()));
-        self.textures.insert(key, texture);
+        let image = preload::decode_image(path)?;
+        let texture = gfx.create_texture(image.width, image.height, &image.pixels);
+        self.textures.insert(path.to_path_buf(), texture);
         Some(texture)
     }
 

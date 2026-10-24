@@ -20,6 +20,7 @@ enum Page {
 }
 
 const MSAA_LEVELS: [u32; 4] = [1, 2, 4, 8];
+const GRAPHICS_ITEMS: [&str; 2] = ["ANTIALIASING", "PRELOAD ASSETS"];
 
 #[derive(Clone, Copy, PartialEq)]
 enum Pref {
@@ -94,8 +95,12 @@ fn pref_value(ctx: &Ctx, pref: Pref) -> bool {
     }
 }
 
-fn graphics_value(prefs: &Prefs) -> String {
-    if prefs.msaa <= 1 { "OFF".to_string() } else { format!("{}X", prefs.msaa) }
+fn graphics_value(index: usize, prefs: &Prefs) -> String {
+    match index {
+        0 if prefs.msaa <= 1 => "OFF".to_string(),
+        0 => format!("{}X", prefs.msaa),
+        _ => on_off(prefs.preload_assets).to_string(),
+    }
 }
 
 fn on_off(value: bool) -> &'static str {
@@ -151,10 +156,10 @@ impl Options {
         let graphics_cam = ctx.add_camera(graphics_cam);
         let mut graphics_items = Vec::new();
         let mut graphics_values = Vec::new();
-        for (i, label) in ["ANTIALIASING"].iter().enumerate() {
+        for (i, label) in GRAPHICS_ITEMS.iter().enumerate() {
             let y = 120.0 * i as f64 + 30.0;
             graphics_items.push(Alphabet::atlas(ctx, 120.0, y, label, Font::Bold));
-            let value = graphics_value(&ctx.data.prefs);
+            let value = graphics_value(i, &ctx.data.prefs);
             graphics_values.push(Alphabet::atlas(ctx, 0.0, y + 14.0, &value, Font::Default));
         }
         let mut graphics_note = Alphabet::atlas(ctx, 0.0, 330.0, "RESTART TO APPLY CHANGES", Font::Default);
@@ -356,10 +361,14 @@ impl Options {
 
     fn step_graphics(&mut self, ctx: &mut Ctx, index: usize, step: i64) {
         let prefs = &mut ctx.data.prefs;
-        let len = MSAA_LEVELS.len() as i64;
-        let pos = MSAA_LEVELS.iter().position(|level| *level == prefs.msaa).unwrap_or(0) as i64;
-        prefs.msaa = MSAA_LEVELS[(pos + step).rem_euclid(len) as usize];
-        self.graphics_values[index].set_text(&graphics_value(&ctx.data.prefs));
+        if index == 0 {
+            let len = MSAA_LEVELS.len() as i64;
+            let pos = MSAA_LEVELS.iter().position(|level| *level == prefs.msaa).unwrap_or(0) as i64;
+            prefs.msaa = MSAA_LEVELS[(pos + step).rem_euclid(len) as usize];
+        } else {
+            prefs.preload_assets = !prefs.preload_assets;
+        }
+        self.graphics_values[index].set_text(&graphics_value(index, &ctx.data.prefs));
         ctx.data.prefs.store(&mut ctx.save);
     }
 

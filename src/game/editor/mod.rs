@@ -189,7 +189,7 @@ pub fn format_time(ms: f64) -> String {
 
 impl Editor {
     pub fn open(ctx: &mut Ctx, id: &str, difficulty: &str) -> Editor {
-        let chart = library::chart_file(ctx, id).unwrap_or_else(|| ChartFile::new(id));
+        let chart = library::chart_file(ctx, id).map(|c| (*c).clone()).unwrap_or_else(|| ChartFile::new(id));
         let index = chart.find(difficulty).or_else(|| chart.find("normal")).unwrap_or(0);
         Editor::create(ctx, chart, index, Origin::Freeplay)
     }
@@ -239,7 +239,7 @@ impl Editor {
         let mut songs: Vec<String> = super::weeks::WEEKS.iter().flat_map(|w| w.songs.iter().map(|s| super::song::song_id(s))).collect();
         for custom in library::custom_songs(ctx) {
             if !songs.contains(&custom.id) {
-                songs.push(custom.id);
+                songs.push(custom.id.clone());
             }
         }
         let mut editor = Editor {

@@ -51,7 +51,7 @@ impl Freeplay {
         }
         for chart in library::custom_songs(ctx) {
             if !songs.iter().any(|s| s.id == chart.id) {
-                songs.push(Entry { id: chart.id, name: chart.name, week: 0, icon: chart.opponent, difficulties: Vec::new() });
+                songs.push(Entry { id: chart.id.clone(), name: chart.name.clone(), week: 0, icon: chart.opponent.clone(), difficulties: Vec::new() });
             }
         }
         for entry in songs.iter_mut() {
