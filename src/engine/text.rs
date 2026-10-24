@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -19,16 +19,30 @@ struct Glyph {
 
 thread_local! {
     static GLYPHS: RefCell<HashMap<(usize, char, u32), Rc<Glyph>>> = RefCell::new(HashMap::new());
+    static GLYPH_CACHE: Cell<bool> = const { Cell::new(false) };
+}
+
+pub fn enable_glyph_cache() {
+    GLYPH_CACHE.with(|c| c.set(true));
+}
+
+fn glyph_caching() -> bool {
+    GLYPH_CACHE.with(|c| c.get())
 }
 
 fn cached_glyph(font: &Rc<Font>, ch: char, px: f32) -> Rc<Glyph> {
+    let caching = glyph_caching();
     let key = (Rc::as_ptr(font) as usize, ch, px.to_bits());
-    if let Some(glyph) = GLYPHS.with(|g| g.borrow().get(&key).cloned()) {
-        return glyph;
+    if caching {
+        if let Some(glyph) = GLYPHS.with(|g| g.borrow().get(&key).cloned()) {
+            return glyph;
+        }
     }
     let (metrics, coverage) = font.rasterize(ch, px);
     let glyph = Rc::new(Glyph { metrics, coverage });
-    GLYPHS.with(|g| g.borrow_mut().insert(key, glyph.clone()));
+    if caching {
+        GLYPHS.with(|g| g.borrow_mut().insert(key, glyph.clone()));
+    }
     glyph
 }
 
@@ -159,7 +173,13 @@ impl Text {
     }
 
     fn advance(&self, ch: char) -> f64 {
-        cached_glyph(&self.font, ch, self.px()).metrics.advance_width as f64
+        let px = self.px();
+        let advance = if glyph_caching() {
+            cached_glyph(&self.font, ch, px).metrics.advance_width
+        } else {
+            self.font.metrics(ch, px).advance_width
+        };
+        advance as f64
     }
 
     fn line_height(&self) -> f64 {

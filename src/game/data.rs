@@ -136,13 +136,14 @@ pub struct Prefs {
     pub opponent_strums: bool,
     pub ghost_tapping: bool,
     pub quick_transitions: bool,
+    pub preload_assets: bool,
     pub offset: f64,
     pub msaa: u32,
 }
 
 impl Default for Prefs {
     fn default() -> Self {
-        Prefs { downscroll: false, flashing_menu: true, camera_zoom: true, fps_counter: true, auto_pause: false, opponent_strums: false, ghost_tapping: false, quick_transitions: false, offset: 0.0, msaa: 1 }
+        Prefs { downscroll: false, flashing_menu: true, camera_zoom: true, fps_counter: true, auto_pause: false, opponent_strums: false, ghost_tapping: false, quick_transitions: false, preload_assets: false, offset: 0.0, msaa: 1 }
     }
 }
 
@@ -158,7 +159,8 @@ impl Prefs {
             p.auto_pause = flag("auto-pause", p.auto_pause);
             p.opponent_strums = flag("opponent-strums", p.opponent_strums);
             p.ghost_tapping = flag("ghost-tapping", p.ghost_tapping);
-            p.quick_transitions = flag("quick-transitions", p.quick_transitions);            p.offset = map.get("offset").and_then(|v| v.as_f64()).unwrap_or(p.offset);
+            p.quick_transitions = flag("quick-transitions", p.quick_transitions);
+            p.preload_assets = flag("preload-assets", p.preload_assets);            p.offset = map.get("offset").and_then(|v| v.as_f64()).unwrap_or(p.offset);
             p.msaa = map.get("msaa").and_then(|v| v.as_u64()).map(|v| v as u32).unwrap_or(p.msaa);
         }
         p
@@ -175,7 +177,8 @@ impl Prefs {
                 "auto-pause": self.auto_pause,
                 "opponent-strums": self.opponent_strums,
                 "ghost-tapping": self.ghost_tapping,
-                "quick-transitions": self.quick_transitions,                "offset": self.offset,
+                "quick-transitions": self.quick_transitions,
+                "preload-assets": self.preload_assets,                "offset": self.offset,
                 "msaa": self.msaa,
             }),
         );

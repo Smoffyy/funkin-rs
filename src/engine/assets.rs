@@ -11,6 +11,7 @@ use super::atlas::Frames;
 use super::audio::Audio;
 use super::gfx::{Gfx, Texture};
 use super::preload::{self, DecodedImage, Job, Loaded};
+use super::text::enable_glyph_cache;
 use crate::game::song::{ChartFile, Song};
 
 const UPLOAD_BUDGET: Duration = Duration::from_millis(4);
@@ -35,6 +36,7 @@ pub struct Assets {
     pub songs: HashMap<(String, String), Rc<Song>>,
     loads: Option<Receiver<Loaded>>,
     images_pending: usize,
+    caching: bool,
 }
 
 impl Assets {
@@ -50,13 +52,36 @@ impl Assets {
             songs: HashMap::new(),
             loads: None,
             images_pending: 0,
+            caching: false,
         }
     }
 
-    pub fn start_preload(&mut self, charts_dir: &Path) {
+    pub fn enable_caching(&mut self, charts_dir: &Path) {
         let jobs = preload::jobs(&self.roots, charts_dir);
         self.images_pending = jobs.iter().filter(|job| matches!(job, Job::Image(_))).count();
+        self.caching = true;
+        enable_glyph_cache();
         self.loads = Some(preload::start(jobs));
+    }
+
+    pub fn cached_chart(&self, id: &str) -> Option<Rc<ChartFile>> {
+        if self.caching { self.charts.get(id).cloned() } else { None }
+    }
+
+    pub fn store_chart(&mut self, id: String, chart: Rc<ChartFile>) {
+        if self.caching {
+            self.charts.insert(id, chart);
+        }
+    }
+
+    pub fn cached_song(&self, key: &(String, String)) -> Option<Rc<Song>> {
+        if self.caching { self.songs.get(key).cloned() } else { None }
+    }
+
+    pub fn store_song(&mut self, key: (String, String), song: Rc<Song>) {
+        if self.caching {
+            self.songs.insert(key, song);
+        }
     }
 
     pub fn warm(&mut self, gfx: &mut Gfx, audio: &mut Audio) {

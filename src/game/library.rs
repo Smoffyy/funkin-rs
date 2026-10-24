@@ -31,11 +31,11 @@ pub fn load_chart(roots: &[PathBuf], folder: &Path, id: &str) -> Option<ChartFil
 
 pub fn chart_file(ctx: &mut Ctx, song: &str) -> Option<Rc<ChartFile>> {
     let id = song_id(song);
-    if let Some(chart) = ctx.assets.charts.get(&id) {
-        return Some(chart.clone());
+    if let Some(chart) = ctx.assets.cached_chart(&id) {
+        return Some(chart);
     }
     let chart = Rc::new(load_chart(&ctx.assets.roots, &chart_folder(ctx, &id), &id)?);
-    ctx.assets.charts.insert(id, chart.clone());
+    ctx.assets.store_chart(id, chart.clone());
     Some(chart)
 }
 
@@ -46,7 +46,7 @@ pub fn save_chart(ctx: &mut Ctx, chart: &ChartFile) -> std::io::Result<PathBuf> 
     let path = folder.join("chart.json");
     fs::write(&path, chart.write())?;
     ctx.assets.songs.retain(|(song, _), _| *song != id);
-    ctx.assets.charts.insert(id, Rc::new(chart.clone()));
+    ctx.assets.store_chart(id, Rc::new(chart.clone()));
     Ok(path)
 }
 
@@ -64,11 +64,11 @@ pub fn custom_songs(ctx: &mut Ctx) -> Vec<Rc<ChartFile>> {
 
 pub fn chart(ctx: &mut Ctx, song: &str, difficulty: &str) -> Option<Rc<Song>> {
     let key = (song_id(song), difficulty.to_string());
-    if let Some(built) = ctx.assets.songs.get(&key) {
-        return Some(built.clone());
+    if let Some(built) = ctx.assets.cached_song(&key) {
+        return Some(built);
     }
     let built = Rc::new(chart_file(ctx, song)?.song(difficulty)?);
-    ctx.assets.songs.insert(key, built.clone());
+    ctx.assets.store_song(key, built.clone());
     Some(built)
 }
 
