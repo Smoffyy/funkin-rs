@@ -133,6 +133,7 @@ pub struct Prefs {
     pub camera_zoom: bool,
     pub fps_counter: bool,
     pub auto_pause: bool,
+    pub engine_features: bool,
     pub opponent_strums: bool,
     pub ghost_tapping: bool,
     pub quick_transitions: bool,
@@ -143,7 +144,7 @@ pub struct Prefs {
 
 impl Default for Prefs {
     fn default() -> Self {
-        Prefs { downscroll: false, flashing_menu: true, camera_zoom: true, fps_counter: true, auto_pause: false, opponent_strums: false, ghost_tapping: false, quick_transitions: false, preload_assets: false, offset: 0.0, msaa: 1 }
+        Prefs { downscroll: false, flashing_menu: true, camera_zoom: true, fps_counter: true, auto_pause: false, engine_features: true, opponent_strums: false, ghost_tapping: false, quick_transitions: false, preload_assets: false, offset: 0.0, msaa: 1 }
     }
 }
 
@@ -157,10 +158,12 @@ impl Prefs {
             p.camera_zoom = flag("camera-zoom", p.camera_zoom);
             p.fps_counter = flag("fps-counter", p.fps_counter);
             p.auto_pause = flag("auto-pause", p.auto_pause);
+            p.engine_features = flag("engine-features", p.engine_features);
             p.opponent_strums = flag("opponent-strums", p.opponent_strums);
             p.ghost_tapping = flag("ghost-tapping", p.ghost_tapping);
             p.quick_transitions = flag("quick-transitions", p.quick_transitions);
-            p.preload_assets = flag("preload-assets", p.preload_assets);            p.offset = map.get("offset").and_then(|v| v.as_f64()).unwrap_or(p.offset);
+            p.preload_assets = flag("preload-assets", p.preload_assets);
+            p.offset = map.get("offset").and_then(|v| v.as_f64()).unwrap_or(p.offset);
             p.msaa = map.get("msaa").and_then(|v| v.as_u64()).map(|v| v as u32).unwrap_or(p.msaa);
         }
         p
@@ -175,14 +178,36 @@ impl Prefs {
                 "camera-zoom": self.camera_zoom,
                 "fps-counter": self.fps_counter,
                 "auto-pause": self.auto_pause,
+                "engine-features": self.engine_features,
                 "opponent-strums": self.opponent_strums,
                 "ghost-tapping": self.ghost_tapping,
                 "quick-transitions": self.quick_transitions,
-                "preload-assets": self.preload_assets,                "offset": self.offset,
+                "preload-assets": self.preload_assets,
+                "offset": self.offset,
                 "msaa": self.msaa,
             }),
         );
         save.flush();
+    }
+
+    pub fn opponent_strums_active(&self) -> bool {
+        self.engine_features && self.opponent_strums
+    }
+
+    pub fn ghost_tapping_active(&self) -> bool {
+        self.engine_features && self.ghost_tapping
+    }
+
+    pub fn quick_transitions_active(&self) -> bool {
+        self.engine_features && self.quick_transitions
+    }
+
+    pub fn preload_assets_active(&self) -> bool {
+        self.engine_features && self.preload_assets
+    }
+
+    pub fn msaa_samples(&self) -> u32 {
+        if self.engine_features { self.msaa } else { 1 }
     }
 }
 

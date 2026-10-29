@@ -1042,7 +1042,7 @@ impl PlayState {
             }
             let notes = &self.notes;
             possible.sort_by_key(|&i| (notes[i].strum_time) as i64);
-            let ghost = ctx.data.prefs.ghost_tapping;
+            let ghost = ctx.data.prefs.ghost_tapping_active();
             if !possible.is_empty() {
                 for (d, pressed) in press.iter().enumerate() {
                     if *pressed && !ghost && !directions.contains(&d) {
@@ -1132,7 +1132,7 @@ impl PlayState {
                 let name = format!("sing{}{}", COLORS[self.notes[i].data], alt);
                 let name = if self.dad.has_anim(&name) { name } else { format!("sing{}", COLORS[self.notes[i].data]) };
                 self.dad.play_anim(&name, true, false, 0);
-                if ctx.data.prefs.opponent_strums {
+                if ctx.data.prefs.opponent_strums_active() {
                     self.light_strum(self.notes[i].data);
                 }
                 self.dad.hold_timer = 0.0;
@@ -1507,7 +1507,7 @@ impl PlayState {
         if self.generated_music {
             self.update_notes(ctx);
         }
-        if ctx.data.prefs.opponent_strums {
+        if ctx.data.prefs.opponent_strums_active() {
             self.update_opponent_strums();
         }
         if ctx.keys.just_pressed(miniquad::KeyCode::F6) {

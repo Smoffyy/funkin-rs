@@ -15,12 +15,11 @@ use super::widgets::Flicker;
 enum Page {
     Options,
     Preferences,
-    Graphics,
+    Engine,
     Controls,
 }
 
 const MSAA_LEVELS: [u32; 4] = [1, 2, 4, 8];
-const GRAPHICS_ITEMS: [&str; 2] = ["ANTIALIASING", "PRELOAD ASSETS"];
 
 #[derive(Clone, Copy, PartialEq)]
 enum Pref {
@@ -29,26 +28,168 @@ enum Pref {
     CameraZoom,
     FpsCounter,
     AutoPause,
+    EngineFeatures,
     OpponentStrums,
     GhostTapping,
     QuickTransitions,
+    PreloadAssets,
 }
 
-const PREFS: [(&str, Pref); 8] = [
+impl Pref {
+    fn label(self) -> &'static str {
+        match self {
+            Pref::Downscroll => "downscroll",
+            Pref::FlashingMenu => "flashing menu",
+            Pref::CameraZoom => "camera zooming on beat",
+            Pref::FpsCounter => "fps counter",
+            Pref::AutoPause => "auto pause",
+            Pref::EngineFeatures => "engine features",
+            Pref::OpponentStrums => "opponent note strums",
+            Pref::GhostTapping => "ghost tapping",
+            Pref::QuickTransitions => "quick transitions",
+            Pref::PreloadAssets => "preload assets",
+        }
+    }
+}
+
+const PREFS: [(&str, Pref); 5] = [
     ("downscroll", Pref::Downscroll),
     ("flashing menu", Pref::FlashingMenu),
     ("camera zooming on beat", Pref::CameraZoom),
     ("fps counter", Pref::FpsCounter),
     ("auto pause", Pref::AutoPause),
-    ("opponent note strums", Pref::OpponentStrums),
-    ("ghost tapping", Pref::GhostTapping),
-    ("quick transitions", Pref::QuickTransitions),
+];
+
+#[derive(Clone, Copy, PartialEq)]
+enum Entry {
+    Title(&'static str),
+    Note(&'static str),
+    Pref(Pref),
+    Antialiasing,
+}
+
+impl Entry {
+    fn selectable(self) -> bool {
+        !matches!(self, Entry::Title(_) | Entry::Note(_))
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Entry::Title(text) | Entry::Note(text) => text,
+            Entry::Pref(pref) => pref.label(),
+            Entry::Antialiasing => "antialiasing",
+        }
+    }
+
+    fn locked(self, prefs: &Prefs) -> bool {
+        let engine_feature = matches!(
+            self,
+            Entry::Antialiasing | Entry::Pref(Pref::OpponentStrums | Pref::GhostTapping | Pref::QuickTransitions | Pref::PreloadAssets)
+        );
+        engine_feature && !prefs.engine_features
+    }
+}
+
+const ENGINE_ENTRIES: [Entry; 11] = [
+    Entry::Pref(Pref::EngineFeatures),
+    Entry::Note("OFF PLAYS THE BASE GAME"),
+    Entry::Title("GAMEPLAY"),
+    Entry::Pref(Pref::OpponentStrums),
+    Entry::Pref(Pref::GhostTapping),
+    Entry::Title("INTERFACE"),
+    Entry::Pref(Pref::QuickTransitions),
+    Entry::Title("GRAPHICS"),
+    Entry::Note("RESTART TO APPLY CHANGES"),
+    Entry::Antialiasing,
+    Entry::Pref(Pref::PreloadAssets),
 ];
 
 struct Binding {
     text: Alphabet,
     control: Control,
     key: Option<KeyCode>,
+}
+
+struct Toggles {
+    items: Vec<Alphabet>,
+    values: Vec<Alphabet>,
+    entries: &'static [Entry],
+    selected: usize,
+    cam: usize,
+}
+
+impl Toggles {
+    fn new(ctx: &mut Ctx, entries: &'static [Entry]) -> Toggles {
+        let mut items = Vec::new();
+        let mut values = Vec::new();
+        let mut camera = Camera::transparent();
+        camera.visible = false;
+        let id = ctx.add_camera(camera);
+        let mut y = 30.0;
+        for entry in entries {
+            if matches!(entry, Entry::Title(_)) {
+                y += 40.0;
+            }
+            let item = match entry {
+                Entry::Title(_) => {
+                    let mut title = Alphabet::atlas(ctx, 0.0, y, entry.label(), Font::Bold);
+                    title.screen_center_x();
+                    title
+                }
+                Entry::Note(_) => Alphabet::atlas(ctx, 150.0, y, entry.label(), Font::Default),
+                _ => Alphabet::atlas(ctx, 150.0, y, entry.label(), Font::Bold),
+            };
+            items.push(item);
+            let value = entry_value(&ctx.data.prefs, *entry);
+            values.push(Alphabet::atlas(ctx, 0.0, y + 8.0, &value, Font::Default));
+            y += if matches!(entry, Entry::Title(_)) { 90.0 } else { 100.0 };
+        }
+        let selected = entries.iter().position(|entry| entry.selectable()).unwrap_or(0);
+        {
+            let y = items[selected].y;
+            let cam = ctx.camera(id);
+            cam.follow(Target { x: GAME_WIDTH / 2.0, y, width: 70.0, height: 70.0 }, FollowStyle::LockOn, 0.06);
+            cam.deadzone = Some([0.0, 100.0, GAME_WIDTH, GAME_HEIGHT - 200.0]);
+            cam.min_scroll_y = Some(0.0);
+        }
+        Toggles { items, values, entries, selected, cam: id }
+    }
+
+    fn step(&self, down: bool) -> usize {
+        let len = self.entries.len();
+        let mut next = self.selected;
+        loop {
+            next = if down { (next + 1) % len } else { (next + len - 1) % len };
+            if self.entries[next].selectable() {
+                return next;
+            }
+        }
+    }
+
+    fn refresh(&mut self, prefs: &Prefs) {
+        let selected = self.selected;
+        for (i, ((item, value), entry)) in self.items.iter_mut().zip(self.values.iter_mut()).zip(self.entries.iter()).enumerate() {
+            let alpha = match *entry {
+                Entry::Title(_) => 1.0,
+                _ if entry.locked(prefs) => 0.3,
+                _ if i == selected => 1.0,
+                _ => 0.6,
+            };
+            item.set_alpha(alpha);
+            value.set_alpha(if entry.locked(prefs) { 0.3 } else { 0.6 });
+            value.set_text(&entry_value(prefs, *entry));
+            value.x = item.x + item.width() + 30.0;
+        }
+    }
+
+    fn draw(&mut self, dl: &mut DrawList) {
+        for item in self.items.iter_mut() {
+            item.draw(dl, self.cam);
+        }
+        for value in self.values.iter_mut() {
+            value.draw(dl, self.cam);
+        }
+    }
 }
 
 pub struct Options {
@@ -66,11 +207,7 @@ pub struct Options {
     pref_values: Vec<Alphabet>,
     pref_selected: usize,
     pref_cam: usize,
-    graphics_items: Vec<Alphabet>,
-    graphics_values: Vec<Alphabet>,
-    graphics_selected: usize,
-    graphics_cam: usize,
-    graphics_note: Alphabet,
+    engine: Toggles,
     control_headers: Vec<Alphabet>,
     control_labels: Vec<Alphabet>,
     bindings: Vec<Binding>,
@@ -81,25 +218,42 @@ pub struct Options {
     prompt_open: bool,
 }
 
-fn pref_value(ctx: &Ctx, pref: Pref) -> bool {
-    let p = &ctx.data.prefs;
+fn pref_value(prefs: &Prefs, pref: Pref) -> bool {
     match pref {
-        Pref::Downscroll => p.downscroll,
-        Pref::FlashingMenu => p.flashing_menu,
-        Pref::CameraZoom => p.camera_zoom,
-        Pref::FpsCounter => p.fps_counter,
-        Pref::AutoPause => p.auto_pause,
-        Pref::OpponentStrums => p.opponent_strums,
-        Pref::GhostTapping => p.ghost_tapping,
-        Pref::QuickTransitions => p.quick_transitions,
+        Pref::Downscroll => prefs.downscroll,
+        Pref::FlashingMenu => prefs.flashing_menu,
+        Pref::CameraZoom => prefs.camera_zoom,
+        Pref::FpsCounter => prefs.fps_counter,
+        Pref::AutoPause => prefs.auto_pause,
+        Pref::EngineFeatures => prefs.engine_features,
+        Pref::OpponentStrums => prefs.opponent_strums,
+        Pref::GhostTapping => prefs.ghost_tapping,
+        Pref::QuickTransitions => prefs.quick_transitions,
+        Pref::PreloadAssets => prefs.preload_assets,
     }
 }
 
-fn graphics_value(index: usize, prefs: &Prefs) -> String {
-    match index {
-        0 if prefs.msaa <= 1 => "OFF".to_string(),
-        0 => format!("{}X", prefs.msaa),
-        _ => on_off(prefs.preload_assets).to_string(),
+fn pref_flag(prefs: &mut Prefs, pref: Pref) -> &mut bool {
+    match pref {
+        Pref::Downscroll => &mut prefs.downscroll,
+        Pref::FlashingMenu => &mut prefs.flashing_menu,
+        Pref::CameraZoom => &mut prefs.camera_zoom,
+        Pref::FpsCounter => &mut prefs.fps_counter,
+        Pref::AutoPause => &mut prefs.auto_pause,
+        Pref::EngineFeatures => &mut prefs.engine_features,
+        Pref::OpponentStrums => &mut prefs.opponent_strums,
+        Pref::GhostTapping => &mut prefs.ghost_tapping,
+        Pref::QuickTransitions => &mut prefs.quick_transitions,
+        Pref::PreloadAssets => &mut prefs.preload_assets,
+    }
+}
+
+fn entry_value(prefs: &Prefs, entry: Entry) -> String {
+    match entry {
+        Entry::Pref(pref) => on_off(pref_value(prefs, pref)).to_string(),
+        Entry::Antialiasing if prefs.msaa <= 1 => "OFF".to_string(),
+        Entry::Antialiasing => format!("{}X", prefs.msaa),
+        Entry::Title(_) | Entry::Note(_) => String::new(),
     }
 }
 
@@ -129,9 +283,9 @@ impl Options {
 
         let mut option_items = Vec::new();
         let option_labels: Vec<&'static str> = if in_song {
-            vec!["PREFERENCES", "CONTROLS", "GRAPHICS", "EXIT"]
+            vec!["PREFERENCES", "ENGINE", "CONTROLS", "EXIT"]
         } else {
-            vec!["PREFERENCES", "CONTROLS", "GRAPHICS", "CHART EDITOR", "EXIT"]
+            vec!["PREFERENCES", "ENGINE", "CONTROLS", "CHART EDITOR", "EXIT"]
         };
         for (i, label) in option_labels.iter().enumerate() {
             let mut t = Alphabet::atlas(ctx, 0.0, 100.0 + i as f64 * 100.0, label, Font::Bold);
@@ -147,24 +301,10 @@ impl Options {
         let mut pref_values = Vec::new();
         for (i, (label, pref)) in PREFS.iter().enumerate() {
             let y = 120.0 * i as f64 + 30.0;
-            pref_items.push(Alphabet::atlas(ctx, 120.0, y, &label.to_uppercase(), Font::Bold));
-            let value = pref_value(ctx, *pref);
-            pref_values.push(Alphabet::atlas(ctx, 0.0, y + 14.0, on_off(value), Font::Default));
+            pref_items.push(Alphabet::atlas(ctx, 120.0, y, label, Font::Bold));
+            let value = on_off(pref_value(&ctx.data.prefs, *pref));
+            pref_values.push(Alphabet::atlas(ctx, 0.0, y + 14.0, value, Font::Default));
         }
-        let mut graphics_cam = Camera::transparent();
-        graphics_cam.visible = false;
-        let graphics_cam = ctx.add_camera(graphics_cam);
-        let mut graphics_items = Vec::new();
-        let mut graphics_values = Vec::new();
-        for (i, label) in GRAPHICS_ITEMS.iter().enumerate() {
-            let y = 120.0 * i as f64 + 30.0;
-            graphics_items.push(Alphabet::atlas(ctx, 120.0, y, label, Font::Bold));
-            let value = graphics_value(i, &ctx.data.prefs);
-            graphics_values.push(Alphabet::atlas(ctx, 0.0, y + 14.0, &value, Font::Default));
-        }
-        let mut graphics_note = Alphabet::atlas(ctx, 0.0, 330.0, "RESTART TO APPLY CHANGES", Font::Default);
-        graphics_note.screen_center_x();
-        graphics_note.scroll.set(0.0, 0.0);
         {
             let y = pref_items[0].y;
             let cam = ctx.camera(pref_cam);
@@ -172,6 +312,8 @@ impl Options {
             cam.deadzone = Some([0.0, 160.0, GAME_WIDTH, 40.0]);
             cam.min_scroll_y = Some(0.0);
         }
+
+        let engine = Toggles::new(ctx, &ENGINE_ENTRIES);
 
         let mut control_cam = Camera::transparent();
         control_cam.visible = false;
@@ -245,11 +387,7 @@ impl Options {
             pref_values,
             pref_selected: 0,
             pref_cam,
-            graphics_items,
-            graphics_values,
-            graphics_selected: 0,
-            graphics_cam,
-            graphics_note,
+            engine,
             control_headers,
             control_labels,
             bindings,
@@ -261,7 +399,7 @@ impl Options {
         };
         o.refresh_options();
         o.refresh_prefs();
-        o.refresh_graphics();
+        o.engine.refresh(&ctx.data.prefs);
         o.refresh_bindings(ctx);
         o
     }
@@ -293,7 +431,7 @@ impl Options {
     fn set_page(&mut self, ctx: &mut Ctx, page: Page) {
         self.page = page;
         ctx.camera(self.pref_cam).visible = page == Page::Preferences;
-        ctx.camera(self.graphics_cam).visible = page == Page::Graphics;
+        ctx.camera(self.engine.cam).visible = page == Page::Engine;
         ctx.camera(self.control_cam).visible = page == Page::Controls;
     }
 
@@ -317,8 +455,8 @@ impl Options {
         match page {
             Page::Options => match self.option_labels[index] {
                 "PREFERENCES" => self.set_page(ctx, Page::Preferences),
+                "ENGINE" => self.set_page(ctx, Page::Engine),
                 "CONTROLS" => self.set_page(ctx, Page::Controls),
-                "GRAPHICS" => self.set_page(ctx, Page::Graphics),
                 "CHART EDITOR" => {
                     self.enabled = false;
                     ctx.switch_state(|ctx| Box::new(super::editor::Editor::blank(ctx)));
@@ -326,24 +464,14 @@ impl Options {
                 _ => self.leave(ctx),
             },
             Page::Preferences => self.toggle_pref(ctx, index),
-            Page::Graphics => self.step_graphics(ctx, index, 1),
+            Page::Engine => self.change_engine(ctx, index, 1),
             Page::Controls => self.prompt_open = true,
         }
     }
 
     fn toggle_pref(&mut self, ctx: &mut Ctx, index: usize) {
         let pref = PREFS[index].1;
-        let prefs = &mut ctx.data.prefs;
-        let flag = match pref {
-            Pref::Downscroll => &mut prefs.downscroll,
-            Pref::FlashingMenu => &mut prefs.flashing_menu,
-            Pref::CameraZoom => &mut prefs.camera_zoom,
-            Pref::FpsCounter => &mut prefs.fps_counter,
-            Pref::AutoPause => &mut prefs.auto_pause,
-            Pref::OpponentStrums => &mut prefs.opponent_strums,
-            Pref::GhostTapping => &mut prefs.ghost_tapping,
-            Pref::QuickTransitions => &mut prefs.quick_transitions,
-        };
+        let flag = pref_flag(&mut ctx.data.prefs, pref);
         *flag = !*flag;
         let value = *flag;
         self.pref_values[index].set_text(on_off(value));
@@ -351,31 +479,27 @@ impl Options {
         ctx.data.prefs.store(&mut ctx.save);
     }
 
-    fn adjust_value(&mut self, ctx: &mut Ctx, step: i64) {
-        match self.page {
-            Page::Preferences => self.toggle_pref(ctx, self.pref_selected),
-            Page::Graphics => self.step_graphics(ctx, self.graphics_selected, step),
-            _ => {}
+    fn change_engine(&mut self, ctx: &mut Ctx, index: usize, step: i64) {
+        let entry = self.engine.entries[index];
+        if entry.locked(&ctx.data.prefs) {
+            return;
         }
-    }
-
-    fn step_graphics(&mut self, ctx: &mut Ctx, index: usize, step: i64) {
         let prefs = &mut ctx.data.prefs;
-        if index == 0 {
-            let len = MSAA_LEVELS.len() as i64;
-            let pos = MSAA_LEVELS.iter().position(|level| *level == prefs.msaa).unwrap_or(0) as i64;
-            prefs.msaa = MSAA_LEVELS[(pos + step).rem_euclid(len) as usize];
-        } else {
-            prefs.preload_assets = !prefs.preload_assets;
+        match entry {
+            Entry::Pref(pref) => {
+                let flag = pref_flag(prefs, pref);
+                *flag = !*flag;
+            }
+            Entry::Antialiasing => {
+                let len = MSAA_LEVELS.len() as i64;
+                let pos = MSAA_LEVELS.iter().position(|level| *level == prefs.msaa).unwrap_or(0) as i64;
+                prefs.msaa = MSAA_LEVELS[(pos + step).rem_euclid(len) as usize];
+            }
+            Entry::Title(_) | Entry::Note(_) => return,
         }
-        self.graphics_values[index].set_text(&graphics_value(index, &ctx.data.prefs));
+        ctx.show_fps = ctx.data.prefs.fps_counter;
         ctx.data.prefs.store(&mut ctx.save);
-    }
-
-    fn refresh_graphics(&mut self) {
-        for (i, item) in self.graphics_items.iter_mut().enumerate() {
-            item.set_alpha(if i == self.graphics_selected { 1.0 } else { 0.6 });
-        }
+        self.engine.refresh(&ctx.data.prefs);
     }
 
     fn rebind(&mut self, ctx: &mut Ctx, key: KeyCode) {
@@ -431,7 +555,7 @@ impl State for Options {
             let item = match page {
                 Page::Options => &mut self.option_items[index],
                 Page::Preferences => &mut self.pref_items[index],
-                Page::Graphics => &mut self.graphics_items[index],
+                Page::Engine => &mut self.engine.items[index],
                 Page::Controls => &mut self.bindings[index].text,
             };
             let mut visible = item.visible;
@@ -447,13 +571,6 @@ impl State for Options {
         }
         for (i, value) in self.pref_values.iter_mut().enumerate() {
             let item = &self.pref_items[i];
-            value.x = item.x + item.width() + 30.0;
-        }
-        for (i, item) in self.graphics_items.iter_mut().enumerate() {
-            item.x = if i == self.graphics_selected { 150.0 } else { 120.0 };
-        }
-        for (i, value) in self.graphics_values.iter_mut().enumerate() {
-            let item = &self.graphics_items[i];
             value.x = item.x + item.width() + 30.0;
         }
         if !self.enabled {
@@ -492,8 +609,7 @@ impl State for Options {
                 }
                 if ctx.just_pressed(Control::UiLeft) || ctx.just_pressed(Control::UiRight) {
                     library::play_sound(ctx, "scrollMenu", 1.0);
-                    let step = if ctx.just_pressed(Control::UiRight) { 1 } else { -1 };
-                    self.adjust_value(ctx, step);
+                    self.toggle_pref(ctx, self.pref_selected);
                 }
                 if !self.busy && ctx.just_pressed(Control::Accept) {
                     self.accept(ctx, Page::Preferences, self.pref_selected);
@@ -502,19 +618,24 @@ impl State for Options {
                     self.set_page(ctx, Page::Options);
                 }
             }
-            Page::Graphics => {
-                if let Some(next) = Self::nav(ctx, self.graphics_selected, self.graphics_items.len()) {
+            Page::Engine => {
+                let down = ctx.just_pressed(Control::UiDown);
+                if down != ctx.just_pressed(Control::UiUp) {
                     library::play_sound(ctx, "scrollMenu", 1.0);
-                    self.graphics_selected = next;
-                    self.refresh_graphics();
+                    self.engine.selected = self.engine.step(down);
+                    self.engine.refresh(&ctx.data.prefs);
+                    let y = self.engine.items[self.engine.selected].y;
+                    ctx.camera(self.engine.cam).set_target_position(GAME_WIDTH / 2.0, y);
                 }
                 if ctx.just_pressed(Control::UiLeft) || ctx.just_pressed(Control::UiRight) {
                     library::play_sound(ctx, "scrollMenu", 1.0);
                     let step = if ctx.just_pressed(Control::UiRight) { 1 } else { -1 };
-                    self.adjust_value(ctx, step);
+                    let index = self.engine.selected;
+                    self.change_engine(ctx, index, step);
                 }
                 if !self.busy && ctx.just_pressed(Control::Accept) {
-                    self.accept(ctx, Page::Graphics, self.graphics_selected);
+                    let index = self.engine.selected;
+                    self.accept(ctx, Page::Engine, index);
                 } else if !self.busy && ctx.just_pressed(Control::Back) {
                     library::play_sound(ctx, "cancelMenu", 1.0);
                     self.set_page(ctx, Page::Options);
@@ -567,16 +688,7 @@ impl State for Options {
                     v.draw(dl, cam);
                 }
             }
-            Page::Graphics => {
-                let cam = self.graphics_cam;
-                for item in self.graphics_items.iter_mut() {
-                    item.draw(dl, cam);
-                }
-                for v in self.graphics_values.iter_mut() {
-                    v.draw(dl, cam);
-                }
-                self.graphics_note.draw(dl, cam);
-            }
+            Page::Engine => self.engine.draw(dl),
             Page::Controls => {
                 let cam = self.control_cam;
                 for h in self.control_headers.iter_mut() {

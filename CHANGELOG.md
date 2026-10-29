@@ -4,6 +4,12 @@ All notable changes to this project are listed here. Each release has its own se
 
 ## [1.1.0] - TBD
 
+### Added
+- Engine page in Options with an Engine Features switch that turns off all engine-only settings at once, returning the game to base behavior
+
+### Changed
+- Opponent note strums, ghost tapping, quick transitions, antialiasing and preload assets moved from Preferences and Graphics to the Engine page
+
 ### Fixed
 - Girlfriend and other bopping characters no longer skip or repeat a dance beat during a song
 
