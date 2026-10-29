@@ -74,14 +74,13 @@ pub struct BeatEvent {
 
 impl BeatTracker {
     pub fn update(&mut self, conductor: &Conductor, inclusive: bool) -> Option<BeatEvent> {
-        let old = self.cur_step;
-        self.cur_step = conductor.current_step(inclusive);
-        self.cur_beat = (self.cur_step as f64 / 4.0).floor() as i64;
-        if old != self.cur_step && self.cur_step >= 0 {
-            let beat = if self.cur_step % 4 == 0 { Some(self.cur_beat) } else { None };
-            Some(BeatEvent { beat })
-        } else {
-            None
+        let step = conductor.current_step(inclusive);
+        if step <= self.cur_step {
+            return None;
         }
+        self.cur_step = step;
+        self.cur_beat = (step as f64 / 4.0).floor() as i64;
+        let beat = if step % 4 == 0 { Some(self.cur_beat) } else { None };
+        Some(BeatEvent { beat })
     }
 }

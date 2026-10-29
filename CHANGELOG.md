@@ -2,6 +2,11 @@
 
 All notable changes to this project are listed here. Each release has its own section, and the release workflow publishes the section matching the version in `Cargo.toml`.
 
+## [1.1.0] - TBD
+
+### Fixed
+- Girlfriend and other bopping characters no longer skip or repeat a dance beat during a song
+
 ## [1.0.1] - 2026-10-24
 
 ### Added
