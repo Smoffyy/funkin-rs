@@ -136,6 +136,7 @@ pub struct Prefs {
     pub engine_features: bool,
     pub opponent_strums: bool,
     pub ghost_tapping: bool,
+    pub center_arrows: bool,
     pub quick_transitions: bool,
     pub preload_assets: bool,
     pub offset: f64,
@@ -144,7 +145,7 @@ pub struct Prefs {
 
 impl Default for Prefs {
     fn default() -> Self {
-        Prefs { downscroll: false, flashing_menu: true, camera_zoom: true, fps_counter: true, auto_pause: false, engine_features: true, opponent_strums: false, ghost_tapping: false, quick_transitions: false, preload_assets: false, offset: 0.0, msaa: 1 }
+        Prefs { downscroll: false, flashing_menu: true, camera_zoom: true, fps_counter: true, auto_pause: false, engine_features: true, opponent_strums: false, ghost_tapping: false, center_arrows: false, quick_transitions: false, preload_assets: false, offset: 0.0, msaa: 1 }
     }
 }
 
@@ -161,6 +162,7 @@ impl Prefs {
             p.engine_features = flag("engine-features", p.engine_features);
             p.opponent_strums = flag("opponent-strums", p.opponent_strums);
             p.ghost_tapping = flag("ghost-tapping", p.ghost_tapping);
+            p.center_arrows = flag("center-arrows", p.center_arrows);
             p.quick_transitions = flag("quick-transitions", p.quick_transitions);
             p.preload_assets = flag("preload-assets", p.preload_assets);
             p.offset = map.get("offset").and_then(|v| v.as_f64()).unwrap_or(p.offset);
@@ -181,6 +183,7 @@ impl Prefs {
                 "engine-features": self.engine_features,
                 "opponent-strums": self.opponent_strums,
                 "ghost-tapping": self.ghost_tapping,
+                "center-arrows": self.center_arrows,
                 "quick-transitions": self.quick_transitions,
                 "preload-assets": self.preload_assets,
                 "offset": self.offset,
@@ -196,6 +199,10 @@ impl Prefs {
 
     pub fn ghost_tapping_active(&self) -> bool {
         self.engine_features && self.ghost_tapping
+    }
+
+    pub fn center_arrows_active(&self) -> bool {
+        self.engine_features && self.center_arrows
     }
 
     pub fn quick_transitions_active(&self) -> bool {

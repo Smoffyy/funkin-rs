@@ -6,9 +6,11 @@ use crate::engine::math::round_decimal;
 use crate::engine::sprite::Sprite;
 
 use super::conductor::Conductor;
+use super::data::Prefs;
 use super::stage::PIXEL_ZOOM;
 
 pub const SWAG_WIDTH: f64 = 160.0 * 0.7;
+const LANE_LEFT: f64 = 50.0;
 const COLORS: [&str; 4] = ["purple", "blue", "green", "red"];
 
 pub struct Note {
@@ -112,7 +114,7 @@ impl Note {
             s.antialiasing = true;
             s
         };
-        sprite.x += 50.0;
+        sprite.x += LANE_LEFT + center_shift(&ctx.data.prefs);
         sprite.y -= 2000.0;
         sprite.x += SWAG_WIDTH * data as f64;
         sprite.play(&format!("{}Scroll", COLORS[data]), false);
@@ -188,6 +190,14 @@ impl Note {
     }
 }
 
+fn center_shift(prefs: &Prefs) -> f64 {
+    if prefs.center_arrows_active() {
+        (crate::engine::gfx::GAME_WIDTH - (crate::engine::gfx::GAME_WIDTH / 2.0 + 4.0 * SWAG_WIDTH)) / 2.0 - LANE_LEFT
+    } else {
+        0.0
+    }
+}
+
 pub fn strum(ctx: &mut Ctx, index: usize, player: usize, y: f64, pixel: bool) -> Sprite {
     let mut s;
     if pixel {
@@ -224,7 +234,7 @@ pub fn strum(ctx: &mut Ctx, index: usize, player: usize, y: f64, pixel: bool) ->
     s.scroll.set(0.0, 0.0);
     s.id = index as i32;
     s.play("static", false);
-    s.x += 50.0;
+    s.x += LANE_LEFT + center_shift(&ctx.data.prefs);
     s.x += (crate::engine::gfx::GAME_WIDTH / 2.0) * player as f64;
     s
 }

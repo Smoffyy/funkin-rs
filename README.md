@@ -43,7 +43,7 @@ Note and menu keys can be rebound in Options. The pause menu has a **Settings** 
 - The game uses VT323 in place of the VCR OSD Mono and Pixel Arial fonts, which are not included.
 - The frame rate is uncapped and vsync is off.
 - Newgrounds, Discord and the old debug screens are left out. F6 toggles autoplay instead.
-- Two optional settings, both off by default: **Opponent Note Strums** lights up the opponent's arrows when they hit notes, and **Ghost Tapping** stops presses without a note from counting as misses.
+- Three optional settings, all off by default: **Opponent Note Strums** lights up the opponent's arrows when they hit notes, **Ghost Tapping** stops presses without a note from counting as misses, and **Center Arrows** moves both sets of arrows to the middle of the screen.
 - A new chart editor replaces the 0.2.8 one.
 
 ## Chart editor
