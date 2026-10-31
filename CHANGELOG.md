@@ -7,6 +7,7 @@ All notable changes to this project are listed here. Each release has its own se
 ### Added
 - Engine page in Options with an Engine Features switch that turns off all engine-only settings at once, returning the game to base behavior
 - Center Arrows option on the Engine page that moves both sets of arrows to the middle of the screen so the left and right margins match
+- Pixel Perfect Arrows option on the Engine page that keeps arrow animations from drifting, removes the dark line next to arrows, and centers sustain tails under their notes
 
 ### Changed
 - Opponent note strums, ghost tapping, quick transitions, antialiasing and preload assets moved from Preferences and Graphics to the Engine page

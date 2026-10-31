@@ -32,6 +32,7 @@ enum Pref {
     OpponentStrums,
     GhostTapping,
     CenterArrows,
+    PixelPerfectArrows,
     QuickTransitions,
     PreloadAssets,
 }
@@ -48,6 +49,7 @@ impl Pref {
             Pref::OpponentStrums => "opponent note strums",
             Pref::GhostTapping => "ghost tapping",
             Pref::CenterArrows => "center arrows",
+            Pref::PixelPerfectArrows => "pixel perfect arrows",
             Pref::QuickTransitions => "quick transitions",
             Pref::PreloadAssets => "preload assets",
         }
@@ -86,19 +88,20 @@ impl Entry {
     fn locked(self, prefs: &Prefs) -> bool {
         let engine_feature = matches!(
             self,
-            Entry::Antialiasing | Entry::Pref(Pref::OpponentStrums | Pref::GhostTapping | Pref::CenterArrows | Pref::QuickTransitions | Pref::PreloadAssets)
+            Entry::Antialiasing | Entry::Pref(Pref::OpponentStrums | Pref::GhostTapping | Pref::CenterArrows | Pref::PixelPerfectArrows | Pref::QuickTransitions | Pref::PreloadAssets)
         );
         engine_feature && !prefs.engine_features
     }
 }
 
-const ENGINE_ENTRIES: [Entry; 12] = [
+const ENGINE_ENTRIES: [Entry; 13] = [
     Entry::Pref(Pref::EngineFeatures),
     Entry::Note("OFF PLAYS THE BASE GAME"),
     Entry::Title("GAMEPLAY"),
     Entry::Pref(Pref::OpponentStrums),
     Entry::Pref(Pref::GhostTapping),
     Entry::Pref(Pref::CenterArrows),
+    Entry::Pref(Pref::PixelPerfectArrows),
     Entry::Title("INTERFACE"),
     Entry::Pref(Pref::QuickTransitions),
     Entry::Title("GRAPHICS"),
@@ -232,6 +235,7 @@ fn pref_value(prefs: &Prefs, pref: Pref) -> bool {
         Pref::OpponentStrums => prefs.opponent_strums,
         Pref::GhostTapping => prefs.ghost_tapping,
         Pref::CenterArrows => prefs.center_arrows,
+        Pref::PixelPerfectArrows => prefs.pixel_perfect_arrows,
         Pref::QuickTransitions => prefs.quick_transitions,
         Pref::PreloadAssets => prefs.preload_assets,
     }
@@ -248,6 +252,7 @@ fn pref_flag(prefs: &mut Prefs, pref: Pref) -> &mut bool {
         Pref::OpponentStrums => &mut prefs.opponent_strums,
         Pref::GhostTapping => &mut prefs.ghost_tapping,
         Pref::CenterArrows => &mut prefs.center_arrows,
+        Pref::PixelPerfectArrows => &mut prefs.pixel_perfect_arrows,
         Pref::QuickTransitions => &mut prefs.quick_transitions,
         Pref::PreloadAssets => &mut prefs.preload_assets,
     }
