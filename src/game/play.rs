@@ -18,7 +18,7 @@ use super::dialogue::DialogueBox;
 use super::game_over::GameOver;
 use super::gitaroo::GitarooPause;
 use super::library;
-use super::note::{strum, Note, SWAG_WIDTH};
+use super::note::{anchor_core, strum, strum_core, Note, SWAG_WIDTH};
 use super::pause::{PauseAction, PauseMenu};
 use super::song::{ChartEvent, Side, Song};
 use super::stage::{Kind, Stage, PIXEL_ZOOM};
@@ -73,6 +73,7 @@ pub struct PlayState {
     song: Rc<Song>,
     stage: Stage,
     pixel: bool,
+    fixed_arrows: bool,
     gf: Character,
     dad: Character,
     bf: Character,
@@ -170,6 +171,7 @@ impl PlayState {
         let kind = Kind::for_chart(song.stage.as_deref(), &song.id);
         let stage = Stage::new(ctx, kind, &song.id);
         let pixel = stage.kind.is_pixel();
+        let fixed_arrows = !pixel && ctx.data.prefs.pixel_perfect_arrows_active();
         let default_cam_zoom = stage.zoom;
 
         let gf_name = song.girlfriend.clone().unwrap_or_else(|| kind.gf_version().to_string());
@@ -259,6 +261,7 @@ impl PlayState {
             song: song.clone(),
             stage,
             pixel,
+            fixed_arrows,
             gf,
             dad,
             bf,
@@ -944,7 +947,13 @@ impl PlayState {
 
     fn center_strums(&mut self, player: usize) {
         let pixel = self.pixel;
+        let fixed = self.fixed_arrows;
         for s in self.strums.iter_mut().skip(player * 4).take(4) {
+            if fixed {
+                let core = strum_core(s.id as usize, s.anim.name(), s.anim.cur_frame());
+                anchor_core(s, core);
+                continue;
+            }
             s.center_offsets(false);
             if s.anim.name() == "confirm" && !pixel {
                 s.offset.x -= 13.0;
@@ -1042,7 +1051,7 @@ impl PlayState {
             }
             let notes = &self.notes;
             possible.sort_by_key(|&i| (notes[i].strum_time) as i64);
-            let ghost = ctx.data.prefs.ghost_tapping;
+            let ghost = ctx.data.prefs.ghost_tapping_active();
             if !possible.is_empty() {
                 for (d, pressed) in press.iter().enumerate() {
                     if *pressed && !ghost && !directions.contains(&d) {
@@ -1132,7 +1141,7 @@ impl PlayState {
                 let name = format!("sing{}{}", COLORS[self.notes[i].data], alt);
                 let name = if self.dad.has_anim(&name) { name } else { format!("sing{}", COLORS[self.notes[i].data]) };
                 self.dad.play_anim(&name, true, false, 0);
-                if ctx.data.prefs.opponent_strums {
+                if ctx.data.prefs.opponent_strums_active() {
                     self.light_strum(self.notes[i].data);
                 }
                 self.dad.hold_timer = 0.0;
@@ -1507,7 +1516,7 @@ impl PlayState {
         if self.generated_music {
             self.update_notes(ctx);
         }
-        if ctx.data.prefs.opponent_strums {
+        if ctx.data.prefs.opponent_strums_active() {
             self.update_opponent_strums();
         }
         if ctx.keys.just_pressed(miniquad::KeyCode::F6) {
@@ -1519,6 +1528,10 @@ impl PlayState {
             } else {
                 self.key_shit(ctx);
             }
+        }
+        if self.fixed_arrows {
+            self.center_strums(0);
+            self.center_strums(1);
         }
     }
 }

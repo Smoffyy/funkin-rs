@@ -2,6 +2,19 @@
 
 All notable changes to this project are listed here. Each release has its own section, and the release workflow publishes the section matching the version in `Cargo.toml`.
 
+## [1.1.0] - 2026-11-08
+
+### Added
+- Engine page in Options with an Engine Features switch that turns off all engine-only settings at once, returning the game to base behavior
+- Center Arrows option on the Engine page that moves both sets of arrows to the middle of the screen so the left and right margins match
+- Pixel Perfect Arrows option on the Engine page that keeps arrow animations from drifting, removes the dark line next to arrows, and centers sustain tails under their notes
+
+### Changed
+- Opponent note strums, ghost tapping, quick transitions, antialiasing and preload assets moved from Preferences and Graphics to the Engine page
+
+### Fixed
+- Girlfriend and other bopping characters no longer skip or repeat a dance beat during a song
+
 ## [1.0.1] - 2026-10-24
 
 ### Added

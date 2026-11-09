@@ -235,7 +235,7 @@ dependencies = [
 
 [[package]]
 name = "funkin-rs"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "fontdue",
  "image",

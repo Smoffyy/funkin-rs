@@ -25,7 +25,7 @@ use std::path::PathBuf;
 pub use data::GameData;
 
 pub fn msaa_samples() -> i32 {
-    data::Prefs::load(&crate::engine::save::Save::open("funkin-rs")).msaa as i32
+    data::Prefs::load(&crate::engine::save::Save::open("funkin-rs")).msaa_samples() as i32
 }
 
 use crate::engine::app::{App, Ctx, State};
@@ -74,7 +74,7 @@ pub fn boot() -> App {
     let save = crate::engine::save::Save::open("funkin-rs");
     let prefs = Prefs::load(&save);
     let mut assets = Assets::new(content_roots());
-    if prefs.preload_assets {
+    if prefs.preload_assets_active() {
         assets.enable_caching(&charts);
     }
     App::new(

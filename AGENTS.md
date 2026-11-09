@@ -17,7 +17,7 @@ A Rust remake of Friday Night Funkin'. The goal is a 1:1 recreation of how the g
 - Keep the build free of warnings. Delete code that becomes unused instead of silencing it.
 - Keep credits intact. `NOTICE` lists the original creators and must stay accurate.
 - The frame rate is intentionally uncapped with vsync off. Do not add a frame limiter or an FPS setting.
-- Optional gameplay changes (Opponent Note Strums, Ghost Tapping) must stay off by default so the default experience matches 0.2.8.
+- Optional gameplay changes (Opponent Note Strums, Ghost Tapping, Center Arrows, Pixel Perfect Arrows) must stay off by default so the default experience matches 0.2.8.
 
 ## Layout
 
