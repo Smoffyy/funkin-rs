@@ -2,7 +2,7 @@
 
 All notable changes to this project are listed here. Each release has its own section, and the release workflow publishes the section matching the version in `Cargo.toml`.
 
-## [1.1.0] - TBD
+## [1.1.0] - 2026-11-08
 
 ### Added
 - Engine page in Options with an Engine Features switch that turns off all engine-only settings at once, returning the game to base behavior
